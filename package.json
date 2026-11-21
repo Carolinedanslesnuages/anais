@@ -1,0 +1,13 @@
+{
+  "name": "@carolinedanslesnuages/anais",
+  "version": "0.0.0",
+  "description": "Un bullet journal dans le terminal : tâches, événements et notes du jour, migration des tâches ouvertes, en fichiers Markdown lisibles. Sans dépendance.",
+  "type": "module",
+  "bin": { "anais": "bin/anais.mjs" },
+  "files": ["bin", "src"],
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "keywords": ["bullet-journal", "bujo", "terminal", "cli", "markdown", "productivity"],
+  "repository": { "type": "git", "url": "git+https://github.com/Carolinedanslesnuages/anais.git" },
+  "license": "MIT"
+}
