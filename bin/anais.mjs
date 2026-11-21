@@ -11,6 +11,8 @@ import { readSettings, saveSetting } from '../src/settings.mjs';
 import { MOODS, moodNamed } from '../src/moods.mjs';
 import { questionOf } from '../src/evening.mjs';
 import { memoriesOf } from '../src/memories.mjs';
+import { habitNames, addHabit, removeHabit, toggleHabit, monthGrid, streakOf } from '../src/habits.mjs';
+import { listCollections, findCollection, addToCollection } from '../src/collections.mjs';
 import { addEntry, setTaskKind, postpone, migrateOpenTasks, searchEntries, setMood, answerEvening } from '../src/actions.mjs';
 
 const HELP = `Anaïs · ton bullet journal dans le terminal
@@ -33,6 +35,10 @@ const HELP = `Anaïs · ton bullet journal dans le terminal
   anais soir [réponse]       la question du soir, et ta réponse
   anais souvenirs            ce que tu notais il y a un mois, il y a un an
   anais animations oui|non   la petite fête du nuage
+  anais habitudes            le mois de chaque habitude (ajouter <nom>, retirer <nom>)
+  anais coche <habitude>     coche une habitude pour aujourd'hui
+  anais collections          les collections (Livres à lire, Idées…)
+  anais collection <nom> [texte]   une collection, ou y ajouter un élément
 
 Le journal est fait de fichiers Markdown (un par mois), dans ~/.anais ou ANAIS_DOSSIER :
 il se lit et se modifie aussi à la main.`;
@@ -111,6 +117,44 @@ function chooseAnimations(choice) {
   console.log(choice === 'oui' ? 'Le nuage fera la fête.' : 'Le nuage restera immobile.');
 }
 
+function habits(words) {
+  const [action, ...rest] = words;
+  if (action === 'ajouter') return console.log(`Habitude ajoutée : ${addHabit(journal, rest.join(' '))}`);
+  if (action === 'retirer') return console.log(`Habitude retirée : ${removeHabit(journal, rest.join(' '))}`);
+  const names = habitNames(journal);
+  if (!names.length) return console.log(muted('Aucune habitude. Exemple : anais habitudes ajouter eau'));
+  const width = Math.max(...names.map((name) => name.length));
+  for (const name of names) {
+    const streak = streakOf(journal, name, today());
+    console.log(`${name.padEnd(width)}  ${pink(monthGrid(journal, name, today()))}  ${streak ? `${streak} j de suite` : ''}`);
+  }
+}
+
+function tickHabit(words) {
+  const name = words.join(' ').trim().toLowerCase();
+  if (!habitNames(journal).includes(name)) throw new Error(`« ${name} » n'est pas une habitude. Habitudes : ${habitNames(journal).join(', ') || 'aucune'}.`);
+  const done = toggleHabit(journal, today(), name);
+  console.log(done ? `Fait aujourd'hui : ${name} (${streakOf(journal, name, today())} j de suite)` : `Décoché : ${name}`);
+}
+
+function collections(words) {
+  const [name, ...rest] = words;
+  if (!name) {
+    const everyCollection = listCollections(journal);
+    if (!everyCollection.length) return console.log(muted('Aucune collection. Exemple : anais collection idees "un mode cyberdeck"'));
+    for (const collection of everyCollection) console.log(`${pink(collection.title)}  ${muted(`${collection.items.filter((item) => !item.done).length} sur ${collection.items.length}`)}`);
+    return;
+  }
+  if (rest.length) {
+    const saved = addToCollection(journal, name, rest.join(' '));
+    return console.log(`Ajouté à « ${saved.title} » : ${rest.join(' ')}`);
+  }
+  const collection = findCollection(journal, name);
+  if (!collection) throw new Error(`Pas de collection « ${name} ». « anais collection ${name} <texte> » la crée.`);
+  console.log(pink(collection.title));
+  collection.items.forEach((item, index) => console.log(`${muted(String(index + 1).padStart(2))} ${pink(item.done ? '×' : '•')} ${item.done ? muted(item.text) : item.text}`));
+}
+
 function migrate() {
   const moved = migrateOpenTasks(journal, today());
   if (!moved.length) return console.log('Aucune tâche ouverte les jours précédents.');
@@ -180,6 +224,10 @@ function main() {
     case 'soir': return evening(words);
     case 'souvenirs': return memories();
     case 'animations': return chooseAnimations(words[0]);
+    case 'habitudes': return habits(words);
+    case 'coche': return tickHabit(words);
+    case 'collections': return collections([]);
+    case 'collection': return collections(words);
     default: throw new Error(`Commande inconnue : ${command}. Tapez « anais aide ».`);
   }
 }

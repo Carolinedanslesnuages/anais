@@ -105,7 +105,7 @@ test('recherche dans le contenu des notes, résultat détaillé sur le côté', 
   const journal = newJournal();
   addEntry(journal, '2026-11-19', 'note', 'Lecture\nUn passage sur les générations.');
   addEntry(journal, '2026-11-21', 'task', 'ranger le bureau');
-  let state = press(start(journal), journal, TAB_KEY, TAB_KEY, TAB_KEY);
+  let state = press(start(journal), journal, '\x1b[Z'); // Shift+Tab: from Jour back to Chercher
   assert.equal(state.view, 'search');
   state = typeText(state, journal, 'generations');
   assert.equal(state.rows.length, 2, 'trouvé dans le corps, sans tenir compte des accents');
@@ -210,4 +210,45 @@ test('aide complète avec ?, puis n’importe quelle touche pour revenir', () =>
   state = press(state, journal, 'x');
   assert.equal(state.showHelp, false);
   assert.equal(state.view, 'day');
+});
+
+test('habitudes : A pour ajouter, Espace pour cocher, le mois en carrés et la série', async () => {
+  const journal = newJournal();
+  let state = press(start(journal), journal, TAB_KEY, TAB_KEY, TAB_KEY);
+  assert.equal(state.view, 'habits');
+  state = typeText(press(state, journal, 'a'), journal, 'Eau');
+  state = press(state, journal, ENTER);
+  assert.equal(state.message, 'Habitude ajoutée : eau');
+  const { toggleHabit } = await import('../src/habits.mjs');
+  toggleHabit(journal, '2026-11-20', 'eau');
+  state = press(state, journal, ' ');
+  assert.equal(state.message, 'Fait : eau');
+  assert.deepEqual(journal.pageOf('2026-11-21').habits, ['eau']);
+  assert.match(state.rows[0].text, /^■ eau {7}·{19}■■ {9} {2}2 j$/);
+  assert.match(readFileSync(join(journal.folder, '2026-11.md'), 'utf8'), /## Samedi 21 novembre\n\nhabitudes : eau\n/);
+});
+
+test('collections : N pour créer, Entrée pour ouvrir, T pour ajouter, Espace, Échap pour revenir', () => {
+  const journal = newJournal();
+  let state = press(start(journal), journal, TAB_KEY, TAB_KEY, TAB_KEY, TAB_KEY);
+  assert.equal(state.view, 'collections');
+  state = typeText(press(state, journal, 'n'), journal, 'Livres à lire');
+  state = press(state, journal, ENTER);
+  assert.equal(state.message, 'Collection créée : Livres à lire');
+  state = press(state, journal, ENTER);
+  assert.equal(state.collection, 'livres-a-lire');
+  state = typeText(press(state, journal, 't'), journal, 'Les Années');
+  state = press(state, journal, ENTER, ' ');
+  assert.equal(state.message, 'Fait : Les Années');
+  assert.equal(readFileSync(join(journal.folder, 'collections', 'livres-a-lire.md'), 'utf8'), '# Livres à lire\n\n× Les Années\n');
+  state = press(state, journal, ESCAPE);
+  assert.equal(state.collection, null);
+  assert.match(state.rows[0].text, /Livres à lire {2}\(0 sur 1\)/);
+  assert.equal(handleKey(state, ESCAPE, journal), null, 'Échap dans la liste quitte, comme ailleurs');
+});
+
+test('menu : intitulés courts sur un petit écran', () => {
+  const lines = screenText(start(newJournal()), 56);
+  assert.match(lines[1], /Jour.*Sem\..*Mois.*Hab\..*Coll\..*Rech\./);
+  assert.match(screenText(start(newJournal()), 100)[1], /Semaine.*Habitudes.*Collections.*Chercher/);
 });

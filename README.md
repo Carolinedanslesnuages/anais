@@ -58,7 +58,7 @@ plus), un panneau à droite affiche le texte entier de la ligne choisie.
 | T, E | Ajouter une tâche, un événement (une ligne, Entrée pour noter) |
 | N | Écrire une note, sur autant de lignes que vous voulez : Entrée passe à la ligne, Ctrl+S enregistre |
 | Entrée | Lire et modifier la ligne choisie (Ctrl+S enregistre) ; dans Semaine, Mois ou Chercher : ouvrir le jour |
-| Tab | Passer d'une vue à l'autre : Jour, Semaine, Mois, Chercher |
+| Tab | Passer d'une vue à l'autre : Jour, Semaine, Mois, Habitudes, Collections, Chercher |
 | M | Dans Mois : reporter à aujourd'hui les tâches restées ouvertes |
 | H | Humeur du jour |
 | S | Question du soir |
@@ -82,6 +82,28 @@ résultat choisi s'affiche en entier dans le panneau.
 - **?** affiche toutes les touches.
 
 En ligne de commande : `anais humeur radieuse`, `anais soir <réponse>`, `anais souvenirs`.
+
+### Les habitudes et les collections
+
+Deux vues de plus dans le menu :
+
+- **Habitudes** : A ajoute une habitude (eau, marche, lecture…), Espace la coche pour le jour
+  affiché. Chaque habitude montre son mois (■ fait, · manqué) et sa série de jours de suite.
+- **Collections** : des pages en dehors des jours (« Livres à lire », « Idées », « Cadeaux »…).
+  N crée une collection, Entrée l'ouvre, T ajoute un élément, Espace le coche, Échap revient à
+  la liste.
+
+```text
+■ eau       ··············■■■■■■■            7 j
+□ marche    ·················■·■·            1 j
+```
+
+En ligne de commande : `anais habitudes ajouter eau`, `anais coche eau`, `anais habitudes`,
+`anais collection "Livres à lire" "Les Années"`, `anais collections`.
+
+Les habitudes sont rangées dans `reglages.json` et cochées dans la page du jour
+(`habitudes : eau, marche`) ; chaque collection est un fichier Markdown de
+`collections/`.
 
 ### Les couleurs
 
@@ -118,6 +140,10 @@ les commandes ci-dessous, qui écrivent du texte simple.
 | `anais soir [réponse]` | La question du soir, et votre réponse. |
 | `anais souvenirs` | Ce que vous notiez il y a un mois, il y a un an. |
 | `anais animations oui\|non` | La petite fête du nuage. |
+| `anais habitudes [ajouter\|retirer <nom>]` | Le mois de chaque habitude, ou la liste à modifier. |
+| `anais coche <habitude>` | Coche une habitude pour aujourd'hui. |
+| `anais collections` | Les collections. |
+| `anais collection <nom> [texte]` | Une collection, ou y ajouter un élément (la crée au besoin). |
 
 ## Installation
 

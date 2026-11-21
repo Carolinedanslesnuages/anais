@@ -9,6 +9,8 @@ import { MOODS } from '../moods.mjs';
 import { questionOf } from '../evening.mjs';
 import { entryText } from './render.mjs';
 import { fitWidth } from '../text-width.mjs';
+import { habitNames, monthGrid, streakOf } from '../habits.mjs';
+import { listCollections } from '../collections.mjs';
 
 const KIND_LABELS = { task: 'Tâche', done: 'Tâche faite', migrated: 'Tâche reportée', cancelled: 'Tâche abandonnée', event: 'Événement', note: 'Note' };
 const detailHeading = (entry) => `${KIND_LABELS[entry.kind]}${entry.priority ? ' · prioritaire' : ''}`;
@@ -93,7 +95,34 @@ function moodPickerRows(state, journal) {
   return { rows, emptyText: '' };
 }
 
-const BUILDERS = { day: dayRows, week: weekRows, month: monthRows, search: searchRows, moods: moodPickerRows };
+/** One row per habit: the month as squares, and the current series of days. */
+function habitRows(state, journal) {
+  const names = habitNames(journal);
+  const width = Math.max(8, ...names.map((name) => name.length));
+  const rows = names.map((name) => {
+    const doneToday = journal.pageOf(state.isoDay).habits.includes(name);
+    const streak = streakOf(journal, name, state.isoDay);
+    return { text: `${doneToday ? '■' : '□'} ${name.padEnd(width)}  ${monthGrid(journal, name, state.isoDay)}  ${streak ? `${streak} j` : ''}`, selectable: true, habit: name };
+  });
+  return { rows, emptyText: 'Aucune habitude pour l’instant. A pour en ajouter une (eau, marche, lecture…).' };
+}
+
+/** The list of collections, or the items of the open one. */
+function collectionRows(state, journal) {
+  const collections = listCollections(journal);
+  const open = state.collection && collections.find((collection) => collection.slug === state.collection);
+  if (open) {
+    const rows = open.items.map((item, itemIndex) => ({ text: `${item.done ? '×' : '•'} ${item.text}`, selectable: true, itemIndex, muted: item.done }));
+    return { rows: [{ text: open.title, selectable: false }, ...rows], emptyText: '' };
+  }
+  const rows = collections.map((collection) => {
+    const remaining = collection.items.filter((item) => !item.done).length;
+    return { text: `${collection.title}  (${remaining} sur ${collection.items.length})`, selectable: true, slug: collection.slug };
+  });
+  return { rows, emptyText: 'Aucune collection. N pour en créer une (Livres à lire, Idées, Cadeaux…).' };
+}
+
+const BUILDERS = { day: dayRows, week: weekRows, month: monthRows, search: searchRows, moods: moodPickerRows, habits: habitRows, collections: collectionRows };
 
 export function buildRows(state, journal) {
   return { panelDetail: null, ...BUILDERS[state.view](state, journal) };
