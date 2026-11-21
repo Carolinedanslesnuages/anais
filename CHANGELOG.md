@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/Carolinedanslesnuages/anais/compare/v1.0.0...v1.1.0) (2026-11-21)
+
+
+### Features
+
+* 🌸 écran plein en parme et rose, piloté au clavier ([#2](https://github.com/Carolinedanslesnuages/anais/issues/2)) ([2300b76](https://github.com/Carolinedanslesnuages/anais/commit/2300b767bea81717897ccd9222dbd53c0b60efc3))
+
 ## 1.0.0 (2026-11-21)
 
 
