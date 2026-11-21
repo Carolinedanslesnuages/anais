@@ -1,16 +1,28 @@
 /** Journal operations shared by the commands and the full-screen interface. */
 import { addDays, today } from './dates.mjs';
+import { fullText, splitText } from './journal.mjs';
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Adds an entry to a day; returns it with its number on the page. */
+/** Adds an entry to a day (several lines make a long entry); returns it with its number on the page. */
 export function addEntry(journal, isoDay, kind, text, priority = false) {
-  const cleaned = String(text).trim();
-  if (!cleaned) throw new Error('Que faut-il noter ? Exemple : anais t appeler la banque');
+  const { text: firstLine, body } = splitText(text);
+  if (!firstLine) throw new Error('Que faut-il noter ? Exemple : anais t appeler la banque');
   const entries = journal.entriesOf(isoDay);
-  entries.push({ kind, text: cleaned, priority: kind === 'task' && priority });
+  entries.push({ kind, text: firstLine, priority: kind === 'task' && priority, body });
   journal.saveDay(isoDay, entries);
   return { entry: entries[entries.length - 1], number: entries.length };
+}
+
+/** Replaces the whole text of an entry (first line and body), keeping its kind. */
+export function editEntry(journal, isoDay, index, text) {
+  const { text: firstLine, body } = splitText(text);
+  if (!firstLine) throw new Error('La première ligne ne peut pas être vide.');
+  const entries = journal.entriesOf(isoDay);
+  const entry = entryAt(entries, index);
+  Object.assign(entry, { text: firstLine, body });
+  journal.saveDay(isoDay, entries);
+  return entry;
 }
 
 function entryAt(entries, index) {
@@ -53,7 +65,7 @@ export function postpone(journal, isoDay, index, target = 'demain') {
   const targetDay = target === 'demain' ? addDays(isoDay, 1) : target;
   if (!ISO_DAY.test(targetDay) || targetDay <= isoDay) throw new Error('Reporter à « demain » ou à un jour futur AAAA-MM-JJ.');
   const entry = setTaskKind(journal, isoDay, index, 'migrated');
-  journal.saveDay(targetDay, [...journal.entriesOf(targetDay), { kind: 'task', text: entry.text, priority: entry.priority }]);
+  journal.saveDay(targetDay, [...journal.entriesOf(targetDay), { kind: 'task', text: entry.text, priority: entry.priority, body: entry.body || [] }]);
   return { entry, targetDay };
 }
 
@@ -66,23 +78,23 @@ export function migrateOpenTasks(journal, isoDay = today()) {
     if (!open.length) continue;
     for (const entry of open) {
       entry.kind = 'migrated';
-      moved.push({ text: entry.text, priority: entry.priority, from: pastDay });
+      moved.push({ text: entry.text, priority: entry.priority, body: entry.body || [], from: pastDay });
     }
     journal.saveDay(pastDay, entries);
   }
   if (moved.length) {
-    journal.saveDay(isoDay, [...journal.entriesOf(isoDay), ...moved.map(({ text, priority }) => ({ kind: 'task', text, priority }))]);
+    journal.saveDay(isoDay, [...journal.entriesOf(isoDay), ...moved.map(({ text, priority, body }) => ({ kind: 'task', text, priority, body }))]);
   }
   return moved;
 }
 
 const withoutAccents = (text) => text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
-/** Entries matching every word, in the whole journal: [{ isoDay, index, entry }]. */
+/** Entries whose text (body included) holds every word, in the whole journal: [{ isoDay, index, entry }]. */
 export function searchEntries(journal, query) {
   const terms = withoutAccents(query).split(/\s+/).filter(Boolean);
   if (!terms.length) return [];
   return journal.allDays().flatMap((isoDay) => journal.entriesOf(isoDay)
     .map((entry, index) => ({ isoDay, index, entry }))
-    .filter(({ entry }) => terms.every((term) => withoutAccents(entry.text).includes(term))));
+    .filter(({ entry }) => terms.every((term) => withoutAccents(fullText(entry)).includes(term))));
 }

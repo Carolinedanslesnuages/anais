@@ -29,19 +29,22 @@ petit écran d'un cyberdeck.
 ## L'écran
 
 Tapez `anais` tout seul : le journal s'ouvre en plein écran, dans le style des anciennes
-interfaces en mode texte, en parme et rose. Tout se fait au clavier.
+interfaces en mode texte. Tout se fait au clavier. Sur un écran assez large (84 colonnes ou
+plus), un panneau à droite affiche le texte entier de la ligne choisie.
 
 ```text
-╔═ Anaïs ═══════════════════════ samedi 21 novembre ═╗
-║  Jour   Semaine   Mois   Chercher                  ║
-╟────────────────────────────────────────────────────╢
-║  × écrire le README                                ║
-║▸ • ! appeler la banque                             ║
-║  ○ réunion à 14 h                                  ║
-╟────────────────────────────────────────────────────╢
-║ ↑↓ ←→ choisir  Espace fait  ! priorité  R reporter ║
-║ T tâche  E événement  N note  Tab vue  Q quitter   ║
-╚════════════════════════════════════════════════════╝
+╔═ Anaïs ════════════════════════════════════════════════ samedi 21 novembre ═╗
+║  Jour   Semaine   Mois   Chercher                                           ║
+╟─────────────────────────────────────────────────────────────────────────────╢
+║  × écrire le README                    │ Note                               ║
+║  • ! appeler la banque                 │                                    ║
+║▸ – Idée de livre ¶                     │ Idée de livre                      ║
+║  ○ réunion à 14 h                      │ Une famille sur trois générations, ║
+║                                        │ racontée par la cadette.           ║
+╟─────────────────────────────────────────────────────────────────────────────╢
+║ ↑↓ ←→ choisir  Espace fait  ! priorité  R reporter                          ║
+║ T E N ajouter  Entrée lire  Tab vue  Q quitter                              ║
+╚═════════════════════════════════════════════════════════════════════════════╝
 ```
 
 | Touche | Action |
@@ -52,11 +55,31 @@ interfaces en mode texte, en parme et rose. Tout se fait au clavier.
 | ! | Rendre une tâche prioritaire, ou non |
 | R | Reporter la tâche à demain |
 | A | Abandonner la tâche |
-| T, E, N | Ajouter une tâche, un événement, une note |
+| T, E | Ajouter une tâche, un événement (une ligne, Entrée pour noter) |
+| N | Écrire une note, sur autant de lignes que vous voulez : Entrée passe à la ligne, Ctrl+S enregistre |
+| Entrée | Lire et modifier la ligne choisie (Ctrl+S enregistre) ; dans Semaine, Mois ou Chercher : ouvrir le jour |
 | Tab | Passer d'une vue à l'autre : Jour, Semaine, Mois, Chercher |
-| Entrée | Dans Semaine, Mois ou Chercher : ouvrir le jour choisi |
 | M | Dans Mois : reporter à aujourd'hui les tâches restées ouvertes |
 | Q, Échap | Quitter |
+
+Une ligne marquée ¶ a une suite. La recherche porte sur tout le texte, suite comprise, et le
+résultat choisi s'affiche en entier dans le panneau.
+
+### Les couleurs
+
+```sh
+anais theme            # le thème actuel
+anais theme ambre      # ou terminal, sauge
+```
+
+| Thème | Couleurs |
+|---|---|
+| `terminal` (défaut) | Celles de votre terminal : aucun fond imposé, cadres atténués, ligne choisie en inversé. Lisible avec un thème clair comme sombre. |
+| `ambre` | Ambre sur fond noir, comme un ancien écran à phosphore. |
+| `sauge` | Vert doux sur fond gris sombre. |
+
+Le choix est rangé dans `reglages.json`, à côté du journal. `ANAIS_THEME` le remplace le temps
+d'une session.
 
 Un écran plein se lit mal avec un lecteur d'écran : toutes les actions restent possibles avec
 les commandes ci-dessous, qui écrivent du texte simple.
@@ -72,6 +95,7 @@ les commandes ci-dessous, qui écrivent du texte simple.
 | `anais mois` | Une ligne par jour : faites, ouvertes, événements. |
 | `anais chercher <mots>` | Dans tout le journal, sans tenir compte des accents ni des majuscules. |
 | `anais dossier` | Où le journal est rangé. |
+| `anais theme [nom]` | Les couleurs de l'écran : `terminal`, `ambre`, `sauge`. |
 
 ## Installation
 
@@ -94,8 +118,15 @@ Un fichier Markdown par mois (`2026-11.md`) dans `~/.anais`, ou dans le dossier 
 × écrire le README
 • ! appeler la banque
 ○ réunion à 14 h
-– idée : un mode cyberdeck
+– Idée de livre
+  Une famille sur trois générations,
+  racontée par la cadette.
+
+  Commencer par la maison de Bretagne.
 ```
+
+Une note longue continue sur les lignes en retrait de deux espaces ; les lignes vides entre
+elles sont gardées.
 
 **Votre journal reste sur votre ordinateur.** Anaïs n'envoie rien nulle part, et ce dépôt ne
 contient que l'outil. Pour le retrouver sur plusieurs machines, rangez le dossier dans un
