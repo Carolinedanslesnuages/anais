@@ -1,6 +1,6 @@
 {
   "name": "@carolinedanslesnuages/anais",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Un bullet journal dans le terminal : tâches, événements et notes du jour, migration des tâches ouvertes, en fichiers Markdown lisibles. Sans dépendance.",
   "type": "module",
   "bin": {
