@@ -16,13 +16,14 @@ export function entryLine(entry, number) {
   return `${muted(String(number).padStart(2))} ${pink(SYMBOLS[entry.kind])} ${marker}${style(entry.text)}`;
 }
 
-export function dayBlock(isoDay, entries, { isToday = false } = {}) {
-  const title = `${dayLabel(isoDay)}${isToday ? ' · aujourd’hui' : ''}`;
-  const lines = [bold(pink(title))];
+export function dayBlock(isoDay, entries, { isToday = false, page = null } = {}) {
+  const mood = page && page.mood ? ` · ${page.mood.emoji} ${page.mood.name}` : '';
+  const lines = [bold(pink(`${dayLabel(isoDay)}${isToday ? ' · aujourd’hui' : ''}`)) + mood];
   if (!entries.length) lines.push(muted('   (rien pour l’instant)'));
   entries.forEach((entry, index) => {
     lines.push(entryLine(entry, index + 1));
     for (const bodyLine of entry.body || []) lines.push(muted(`      ${bodyLine}`));
   });
+  if (page && page.evening && page.evening.answer) lines.push(muted(`   soir : ${page.evening.answer}`));
   return lines.join('\n');
 }

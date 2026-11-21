@@ -60,10 +60,28 @@ plus), un panneau à droite affiche le texte entier de la ligne choisie.
 | Entrée | Lire et modifier la ligne choisie (Ctrl+S enregistre) ; dans Semaine, Mois ou Chercher : ouvrir le jour |
 | Tab | Passer d'une vue à l'autre : Jour, Semaine, Mois, Chercher |
 | M | Dans Mois : reporter à aujourd'hui les tâches restées ouvertes |
+| H | Humeur du jour |
+| S | Question du soir |
+| ? | Toutes les touches |
 | Q, Échap | Quitter |
 
 Une ligne marquée ¶ a une suite. La recherche porte sur tout le texte, suite comprise, et le
 résultat choisi s'affiche en entier dans le panneau.
+
+### L'humeur, le soir, les souvenirs et le petit nuage
+
+- **H** choisit l'humeur du jour parmi douze (😄 radieuse, 😌 sereine, 😴 fatiguée…). Elle
+  s'affiche à côté de la date, et la vue **Mois** devient un calendrier des humeurs.
+- **S** ouvre la question du soir, une par jour (« Qu'est-ce qui t'a fait sourire
+  aujourd'hui ? »…). Ces questions ont été écrites pour Anaïs.
+- En ouvrant Anaïs, un rappel de ce que vous notiez **il y a un mois** ou **il y a un an**.
+- Le **petit nuage** (celui de carolinedanslesnuages.github.io) change de tête : endormi avant
+  9 h, content quand vous cochez une tâche, triste avec une humeur triste, et il fait une petite
+  fête de deux secondes quand toutes les tâches du jour sont faites. `anais animations non` le
+  garde immobile.
+- **?** affiche toutes les touches.
+
+En ligne de commande : `anais humeur radieuse`, `anais soir <réponse>`, `anais souvenirs`.
 
 ### Les couleurs
 
@@ -96,6 +114,10 @@ les commandes ci-dessous, qui écrivent du texte simple.
 | `anais chercher <mots>` | Dans tout le journal, sans tenir compte des accents ni des majuscules. |
 | `anais dossier` | Où le journal est rangé. |
 | `anais theme [nom]` | Les couleurs de l'écran : `terminal`, `ambre`, `sauge`. |
+| `anais humeur [nom]` | L'humeur du jour (sans nom : la liste). `anais humeur aucune` la retire. |
+| `anais soir [réponse]` | La question du soir, et votre réponse. |
+| `anais souvenirs` | Ce que vous notiez il y a un mois, il y a un an. |
+| `anais animations oui\|non` | La petite fête du nuage. |
 
 ## Installation
 
@@ -114,6 +136,9 @@ Un fichier Markdown par mois (`2026-11.md`) dans `~/.anais`, ou dans le dossier 
 # Novembre 2026
 
 ## Samedi 21 novembre
+
+humeur : 😄 radieuse
+soir : Qu'est-ce qui t'a fait sourire aujourd'hui ? — Le chat sur le radiateur.
 
 × écrire le README
 • ! appeler la banque

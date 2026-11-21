@@ -1,6 +1,7 @@
 /** Journal operations shared by the commands and the full-screen interface. */
 import { addDays, today } from './dates.mjs';
 import { fullText, splitText } from './journal.mjs';
+import { questionOf } from './evening.mjs';
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -97,4 +98,19 @@ export function searchEntries(journal, query) {
   return journal.allDays().flatMap((isoDay) => journal.entriesOf(isoDay)
     .map((entry, index) => ({ isoDay, index, entry }))
     .filter(({ entry }) => terms.every((term) => withoutAccents(fullText(entry)).includes(term))));
+}
+
+/** Sets the mood of a day ({ emoji, name }), or removes it (null). */
+export function setMood(journal, isoDay, mood) {
+  journal.savePage(isoDay, { ...journal.pageOf(isoDay), mood });
+  return mood;
+}
+
+/** Saves the answer to the evening question (one line: line breaks become spaces). */
+export function answerEvening(journal, isoDay, answer) {
+  const page = journal.pageOf(isoDay);
+  const question = page.evening ? page.evening.question : questionOf(isoDay);
+  const evening = { question, answer: String(answer).replace(/\s*\n\s*/g, ' ').trim() };
+  journal.savePage(isoDay, { ...page, evening });
+  return evening;
 }

@@ -1,4 +1,7 @@
 import { test } from 'node:test';
+import { questionOf } from '../src/evening.mjs';
+
+const QUESTION = questionOf('2026-11-21');
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -26,7 +29,7 @@ test('format : relu puis réécrit à l’identique, lignes libres gardées en n
   const text = '# Novembre 2026\n\n## Samedi 21 novembre\n\n• tâche\n• ! urgente\n× faite\n> reportée\n~ abandonnée\n○ événement\n– note\n';
   assert.equal(formatMonth(parseMonth(text, '2026-11'), '2026-11'), text);
   const edited = parseMonth('## Samedi 21 novembre\n- tiret simple\nune ligne écrite à la main\n', '2026-11');
-  assert.deepEqual(edited.get('2026-11-21').map((entry) => entry.kind), ['note', 'note']);
+  assert.deepEqual(edited.get('2026-11-21').entries.map((entry) => entry.kind), ['note', 'note']);
 });
 
 test('ajouter, numéroter, cocher, abandonner', () => {
@@ -90,4 +93,20 @@ test('un fichier modifié à la main reste lisible', () => {
   writeFileSync(join(folder, '2026-11.md'), '# Novembre 2026\n\n## Samedi 21 novembre\n\n• tâche écrite à la main\n- note au tiret simple\n');
   assert.match(runCli(folder, '2026-11-21').stdout, / 1 • tâche écrite à la main\n 2 – note au tiret simple/);
   assert.equal(runCli(folder, '2026-11-21', 'fait', '1').status, 0);
+});
+
+test('humeur, question du soir et souvenirs en ligne de commande', () => {
+  const folder = newJournal();
+  assert.match(runCli(folder, '2026-11-21', 'humeur').stdout, /Pas encore d’humeur[\s\S]*😄 radieuse/);
+  assert.match(runCli(folder, '2026-11-21', 'humeur', 'radieuse').stdout, /Humeur du jour : 😄 radieuse/);
+  assert.match(runCli(folder, '2026-11-21', 'humeur', 'licorne').stderr, /Humeur inconnue/);
+  assert.ok(runCli(folder, '2026-11-21', 'soir').stdout.startsWith(QUESTION));
+  runCli(folder, '2026-11-21', 'soir', 'me', 'coucher', 'tôt');
+  runCli(folder, '2026-11-21', 't', 'banque');
+  assert.match(runCli(folder, '2026-11-21', 'jour').stdout, /samedi 21 novembre · aujourd’hui · 😄 radieuse[\s\S]*soir : me coucher tôt/);
+  assert.ok(readFileSync(join(folder, '2026-11.md'), 'utf8').includes(`humeur : 😄 radieuse\nsoir : ${QUESTION} — me coucher tôt\n\n• banque`));
+  assert.match(runCli(folder, '2027-11-21', 'souvenirs').stdout, /Il y a un an \(samedi 21 novembre\) : 😄 banque/);
+  assert.match(runCli(folder, '2026-12-31', 'souvenirs').stdout, /Rien de noté/, 'pas de 31 novembre');
+  assert.match(runCli(folder, '2026-11-21', 'animations', 'non').stdout, /immobile/);
+  assert.equal(JSON.parse(readFileSync(join(folder, 'reglages.json'), 'utf8')).animations, false);
 });

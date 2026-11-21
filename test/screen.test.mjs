@@ -1,4 +1,7 @@
 import { test } from 'node:test';
+import { questionOf } from '../src/evening.mjs';
+
+const QUESTION = questionOf('2026-11-21');
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -37,7 +40,7 @@ test('dessin : cadre complet à la bonne largeur, dans les trois thèmes', () =>
     assert.ok(lines.every((line) => [...line].length === 60), `${themeName} : toutes les lignes font 60 caractères`);
   }
   const lines = screenText(state);
-  assert.match(lines[0], /^╔═ Anaïs ═+ samedi 21 novembre ═╗$/);
+  assert.match(lines[0], /^╔═ Anaïs \(•‿•\) ═+ samedi 21 novembre ═╗$/);
   assert.match(lines[3], /^║  • ! appeler la banque/);
   assert.match(lines[4], /^║▸ ○ réunion à 14 h/);
   assert.match(lines[13], /^╚═+╝$/);
@@ -133,4 +136,81 @@ test('cocher, rouvrir, priorité, abandonner, reporter, jours, migration, quitte
   assert.equal(state.message, "1 tâche(s) reportée(s) à aujourd'hui.");
   assert.equal(handleKey(state, 'q', journal), null);
   assert.equal(handleKey(state, '\x03', journal), null);
+});
+
+test('humeur : H, choisir, Entrée ; affichée dans le titre et le calendrier du mois', () => {
+  const journal = newJournal();
+  let state = press(start(journal), journal, 'h');
+  assert.equal(state.view, 'moods');
+  state = press(state, journal, DOWN, ENTER);
+  assert.equal(state.message, 'Humeur : 😌 sereine');
+  assert.deepEqual(journal.pageOf('2026-11-21').mood, { emoji: '😌', name: 'sereine' });
+  const lines = render(state, { width: 60, height: 14 }, THEMES.terminal).map(stripColors);
+  assert.match(lines[0], /samedi 21 novembre · 😌 ═╗$/);
+  assert.match(lines[3], /humeur : 😌 sereine/);
+  state = press(state, journal, TAB_KEY, TAB_KEY);
+  assert.equal(state.view, 'month');
+  const month = screenText(state, 100).join('\n');
+  assert.match(month, /│ Humeurs de novembre 2026/);
+  assert.match(month, / L {2}M {2}M {2}J {2}V {2}S {2}D/);
+  assert.match(month, /20 😌/, 'le 21 porte l’humeur, à sa place dans la semaine');
+  state = press(start(journal), journal, 'h', ...Array(12).fill(DOWN), ENTER);
+  assert.equal(state.message, 'Humeur retirée.');
+  assert.equal(journal.pageOf('2026-11-21').mood, null);
+});
+
+test('les emoji ne décalent pas le cadre', async () => {
+  const { displayWidth } = await import('../src/text-width.mjs');
+  const journal = newJournal();
+  addEntry(journal, '2026-11-21', 'note', 'Anniversaire 🎂 de Léa 🥳 ce soir');
+  const state = press(press(start(journal), journal, 'h'), journal, ENTER);
+  for (const width of [60, 100]) {
+    const lines = render(state, { width, height: 14 }, THEMES.terminal).map(stripColors);
+    assert.ok(lines.every((line) => displayWidth(line) === width), `${width} colonnes`);
+  }
+});
+
+test('question du soir : S, la réponse, Entrée ; la question reste celle du jour', () => {
+  const journal = newJournal();
+  let state = press(start(journal), journal, 's');
+  assert.equal(state.editor.title, QUESTION);
+  state = typeText(state, journal, 'Me coucher plus tôt.');
+  state = press(state, journal, ENTER);
+  assert.equal(state.message, 'Réponse du soir notée.');
+  assert.deepEqual(journal.pageOf('2026-11-21').evening, { question: QUESTION, answer: 'Me coucher plus tôt.' });
+  assert.match(screenText(state)[3], /soir : Me coucher plus tôt\./);
+  assert.equal(press(state, journal, 's').editor.text, 'Me coucher plus tôt.', 'la réponse se reprend');
+});
+
+test('le nuage : endormi le matin, content après une tâche cochée, fête quand tout est fait', () => {
+  const journal = newJournal();
+  addEntry(journal, '2026-11-21', 'task', 'banque');
+  addEntry(journal, '2026-11-21', 'task', 'courses');
+  process.env.ANAIS_HEURE = '7';
+  let state = start(journal);
+  state = press(state, journal, DOWN, ARROW_UP);
+  assert.equal(state.companion, 'sleepy');
+  process.env.ANAIS_HEURE = '15';
+  state = press(state, journal, ' ');
+  assert.equal(state.companion, 'happy');
+  assert.equal(state.partyFrame, null);
+  state = press(state, journal, DOWN, ' ');
+  assert.equal(state.message, 'Tout est fait pour aujourd’hui ✦');
+  assert.equal(state.partyFrame, 0);
+  assert.equal(state.companion, 'party');
+  assert.match(screenText(state, 100).join('\n'), /\(  \^‿\^  \)/);
+  state = press(state, journal, DOWN);
+  assert.equal(state.companion, 'calm', 'la fête ne dure pas');
+  delete process.env.ANAIS_HEURE;
+});
+
+test('aide complète avec ?, puis n’importe quelle touche pour revenir', () => {
+  const journal = newJournal();
+  let state = press(start(journal), journal, '?');
+  const tall = render(state, { width: 60, height: 24 }, THEMES.terminal).map(stripColors).join('\n');
+  assert.match(tall, /H {8}humeur du jour[\s\S]*S {8}question du soir[\s\S]*Q {8}quitter/);
+  assert.match(screenText(state).join('\n'), /agrandissez la fenêtre/, 'petit écran : la suite est signalée');
+  state = press(state, journal, 'x');
+  assert.equal(state.showHelp, false);
+  assert.equal(state.view, 'day');
 });
