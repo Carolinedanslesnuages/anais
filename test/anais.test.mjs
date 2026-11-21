@@ -110,3 +110,17 @@ test('humeur, question du soir et souvenirs en ligne de commande', () => {
   assert.match(runCli(folder, '2026-11-21', 'animations', 'non').stdout, /immobile/);
   assert.equal(JSON.parse(readFileSync(join(folder, 'reglages.json'), 'utf8')).animations, false);
 });
+
+test('habitudes et collections en ligne de commande', () => {
+  const folder = newJournal();
+  assert.match(runCli(folder, '2026-11-21', 'habitudes', 'ajouter', 'Marche').stdout, /Habitude ajoutée : marche/);
+  assert.match(runCli(folder, '2026-11-21', 'habitudes', 'ajouter', 'marche').stderr, /déjà une habitude/);
+  runCli(folder, '2026-11-20', 'coche', 'marche');
+  assert.match(runCli(folder, '2026-11-21', 'coche', 'marche').stdout, /Fait aujourd'hui : marche \(2 j de suite\)/);
+  assert.match(runCli(folder, '2026-11-21', 'habitudes').stdout, /marche {2}·{19}■■ {9} {2}2 j de suite/);
+  assert.match(runCli(folder, '2026-11-21', 'coche', 'yoga').stderr, /n'est pas une habitude/);
+  assert.match(runCli(folder, '2026-11-21', 'collection', 'Idées', 'un', 'mode', 'cyberdeck').stdout, /Ajouté à « Idées » : un mode cyberdeck/);
+  assert.match(runCli(folder, '2026-11-21', 'collections').stdout, /Idées {2}1 sur 1/);
+  assert.match(runCli(folder, '2026-11-21', 'collection', 'idees').stdout, /Idées\n 1 • un mode cyberdeck/);
+  assert.match(runCli(folder, '2026-11-21', 'habitudes', 'retirer', 'marche').stdout, /Habitude retirée/);
+});

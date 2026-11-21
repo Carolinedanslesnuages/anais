@@ -9,6 +9,8 @@ import { memoriesOf } from '../memories.mjs';
 import { render, VIEWS } from './render.mjs';
 import { buildRows, eveningTitle } from './views.mjs';
 import { companionMood, allTasksDone, PARTY_FRAMES, PARTY_STEP_MS } from './cloud.mjs';
+import { addHabit, toggleHabit } from '../habits.mjs';
+import { saveCollection, addToCollection, toggleCollectionItem, findCollection } from '../collections.mjs';
 
 export { buildRows };
 
@@ -25,7 +27,7 @@ const KIND_KEYS = { t: 'task', e: 'event', n: 'note' };
 /** A key that types text (not an arrow, Enter, Tab…). */
 const isText = (pressedKey) => !NAMED_KEYS.has(pressedKey) && !pressedKey.startsWith('\x1b') && pressedKey >= ' ';
 
-export const initialState = () => ({ view: 'day', isoDay: today(), selected: 0, rows: [], message: '', editor: null, query: '', showHelp: false, justTicked: false, partyFrame: null });
+export const initialState = () => ({ collection: null, view: 'day', isoDay: today(), selected: 0, rows: [], message: '', editor: null, query: '', showHelp: false, justTicked: false, partyFrame: null });
 
 /** The current hour (ANAIS_HEURE in the tests). */
 const currentHour = () => (process.env.ANAIS_HEURE !== undefined ? Number(process.env.ANAIS_HEURE) : new Date().getHours());
@@ -54,7 +56,7 @@ function moveSelection(state, step) {
 function switchView(state, step) {
   const position = VIEWS.findIndex(([view]) => view === state.view);
   const [view] = VIEWS[(position + step + VIEWS.length) % VIEWS.length];
-  return { ...state, view, selected: 0, query: view === 'search' ? state.query : '' };
+  return { ...state, view, selected: 0, query: view === 'search' ? state.query : '', collection: null };
 }
 
 function withError(state, action) {
@@ -75,6 +77,16 @@ function handleEditorKey(state, pressedKey, journal) {
   if (saves) {
     if (!editor.text.trim()) return { ...state, editor: null };
     return withError({ ...state, editor: null }, () => {
+      if (editor.habit) return `Habitude ajoutée : ${addHabit(journal, editor.text)}`;
+      if (editor.newCollection) {
+        if (findCollection(journal, editor.text)) throw new Error(`La collection « ${editor.text.trim()} » existe déjà.`);
+        saveCollection(journal, { title: editor.text.trim(), items: [] });
+        return `Collection créée : ${editor.text.trim()}`;
+      }
+      if (editor.collectionSlug) {
+        addToCollection(journal, editor.collectionTitle, editor.text);
+        return 'Ajouté.';
+      }
       if (editor.evening) {
         answerEvening(journal, state.isoDay, editor.text);
         return 'Réponse du soir notée.';
@@ -141,6 +153,37 @@ function handleMoodKey(state, pressedKey, journal) {
   return { ...state, view: 'day', selected: 0, message: viewRow.mood ? `Humeur : ${viewRow.mood.emoji} ${viewRow.mood.name}` : 'Humeur retirée.' };
 }
 
+function handleHabitKey(state, pressedKey, journal) {
+  const viewRow = state.rows[state.selected];
+  if (pressedKey.toLowerCase() === 'a') return { ...state, editor: { habit: true, title: 'Nouvelle habitude', text: '', multiline: false } };
+  if (pressedKey === 'left' || pressedKey === 'right') return { ...state, isoDay: addDays(state.isoDay, pressedKey === 'left' ? -1 : 1) };
+  if (pressedKey === ' ' && viewRow) {
+    const done = toggleHabit(journal, state.isoDay, viewRow.habit);
+    return { ...state, justTicked: done, message: done ? `Fait : ${viewRow.habit}` : `Décoché : ${viewRow.habit}` };
+  }
+  return state;
+}
+
+function handleCollectionKey(state, pressedKey, journal) {
+  const viewRow = state.rows[state.selected];
+  const lower = pressedKey.toLowerCase();
+  if (!state.collection) {
+    if (lower === 'n') return { ...state, editor: { newCollection: true, title: 'Nouvelle collection', text: '', multiline: false } };
+    if (pressedKey === 'enter' && viewRow) return { ...state, collection: viewRow.slug, selected: 0 };
+    return state;
+  }
+  if (pressedKey === 'escape') return { ...state, collection: null, selected: 0 };
+  if (lower === 't') {
+    const title = state.rows[0] ? state.rows[0].text : '';
+    return { ...state, editor: { collectionSlug: state.collection, collectionTitle: title, title: `Ajouter à « ${title} »`, text: '', multiline: false } };
+  }
+  if (pressedKey === ' ' && viewRow) {
+    const item = toggleCollectionItem(journal, state.collection, viewRow.itemIndex);
+    return item ? { ...state, justTicked: item.done, message: item.done ? `Fait : ${item.text}` : `Rouvert : ${item.text}` } : state;
+  }
+  return state;
+}
+
 /** Applies a key; returns the new state, or null to quit. */
 export function handleKey(state, pressedKey, journal) {
   const named = KEYS[pressedKey] || pressedKey;
@@ -153,7 +196,10 @@ export function handleKey(state, pressedKey, journal) {
   else if (named === 'tab' || named === 'shift-tab') next = switchView(next, named === 'tab' ? 1 : -1);
   else if (named === 'up' || named === 'down') next = moveSelection(next, named === 'up' ? -1 : 1);
   else if (state.view === 'search') next = handleSearchKey(next, named);
+  else if (state.view === 'collections' && state.collection && named === 'escape') next = handleCollectionKey(next, named, journal);
   else if (named === 'q' || named === 'Q' || named === 'escape') return null;
+  else if (state.view === 'habits') next = handleHabitKey(next, named, journal);
+  else if (state.view === 'collections') next = handleCollectionKey(next, named, journal);
   else if (state.view === 'day') next = handleDayKey(next, named, journal);
   else if (named === 'enter' && state.rows[state.selected]) next = { ...next, view: 'day', isoDay: state.rows[state.selected].isoDay, selected: 0 };
   else if (state.view === 'week' && (named === 'left' || named === 'right')) next = { ...next, isoDay: addDays(state.isoDay, named === 'left' ? -7 : 7) };

@@ -7,7 +7,9 @@ import { SYMBOLS } from '../journal.mjs';
 import { dayLabel } from '../dates.mjs';
 import { RESET_CODE, themeNamed } from './themes.mjs';
 
-export const VIEWS = [['day', 'Jour'], ['week', 'Semaine'], ['month', 'Mois'], ['search', 'Chercher']];
+export const VIEWS = [['day', 'Jour'], ['week', 'Semaine'], ['month', 'Mois'], ['habits', 'Habitudes'], ['collections', 'Collections'], ['search', 'Chercher']];
+/** Shorter labels when the screen is too narrow for the full ones. */
+const SHORT_LABELS = { day: 'Jour', week: 'Sem.', month: 'Mois', habits: 'Hab.', collections: 'Coll.', search: 'Rech.' };
 /** Below this width, there is no room for the side panel. */
 export const PANEL_MIN_WIDTH = 84;
 
@@ -24,6 +26,9 @@ const HELP_BY_VIEW = {
   month: ['↑↓ choisir un jour  Entrée l’ouvrir  M migrer', 'Tab vue  Q quitter'],
   search: ['Tapez vos mots  ↑↓ choisir  Entrée ouvrir le jour', 'Tab vue  Échap quitter la recherche'],
   moods: ['↑↓ choisir une humeur  Entrée la garder', 'Échap annuler'],
+  habits: ['↑↓ choisir  Espace cocher pour ce jour  ←→ jour', 'A ajouter une habitude  Tab vue  Q quitter'],
+  collections: ['↑↓ choisir  Entrée ouvrir  N nouvelle collection', 'Tab vue  Q quitter'],
+  collection: ['↑↓ choisir  Espace fait  T ajouter', 'Échap retour aux collections  Q quitter'],
   editor: ['Entrée : à la ligne  Ctrl+S : enregistrer', 'Échap : annuler'],
   quickInput: ['Entrée : noter', 'Échap : annuler'],
   help: ['Une touche pour revenir', ''],
@@ -41,7 +46,7 @@ export const FULL_HELP = [
   'Entrée   lire et modifier la ligne (Ctrl+S enregistre)',
   'H        humeur du jour',
   'S        question du soir',
-  'Tab      Jour, Semaine, Mois, Chercher',
+  'Tab      Jour, Semaine, Mois, Habitudes, Collections, Chercher',
   'Q        quitter',
 ];
 
@@ -59,10 +64,12 @@ function titleLine(state, theme, width) {
 }
 
 function menuLine(state, theme, width) {
+  const fullWidth = VIEWS.reduce((total, [, label]) => total + displayWidth(label) + 3, 1);
+  const labelOf = (view, label) => (fullWidth > width - 2 ? SHORT_LABELS[view] : label);
   let line = theme.frame + '║' + theme.bar + ' ';
   let used = 1;
   for (const [view, label] of VIEWS) {
-    const item = ` ${label} `;
+    const item = ` ${labelOf(view, label)} `;
     line += (view === state.view ? theme.barActive : theme.bar) + item + theme.bar + ' ';
     used += displayWidth(item) + 1;
   }
@@ -131,7 +138,7 @@ export function render(state, { width, height }, theme = themeNamed()) {
   }
 
   lines.push(edge('╟', '─', '╢'));
-  const helpKey = state.showHelp ? 'help' : state.editor ? (state.editor.multiline ? 'editor' : 'quickInput') : state.view;
+  const helpKey = state.showHelp ? 'help' : state.editor ? (state.editor.multiline ? 'editor' : 'quickInput') : state.view === 'collections' && state.collection ? 'collection' : state.view;
   const [firstHelp, secondHelp] = HELP_BY_VIEW[helpKey];
   lines.push(boxed(fitWidth(` ${state.message || firstHelp}`, innerWidth), state.message ? theme.message : theme.bar));
   lines.push(boxed(fitWidth(` ${secondHelp}`, innerWidth), theme.bar));
