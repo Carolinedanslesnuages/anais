@@ -26,11 +26,46 @@ petit écran d'un cyberdeck.
 | ○ | événement | `anais e <texte>` |
 | – | note | `anais n <texte>` |
 
+## L'écran
+
+Tapez `anais` tout seul : le journal s'ouvre en plein écran, dans le style des anciennes
+interfaces en mode texte, en parme et rose. Tout se fait au clavier.
+
+```text
+╔═ Anaïs ═══════════════════════ samedi 21 novembre ═╗
+║  Jour   Semaine   Mois   Chercher                  ║
+╟────────────────────────────────────────────────────╢
+║  × écrire le README                                ║
+║▸ • ! appeler la banque                             ║
+║  ○ réunion à 14 h                                  ║
+╟────────────────────────────────────────────────────╢
+║ ↑↓ ←→ choisir  Espace fait  ! priorité  R reporter ║
+║ T tâche  E événement  N note  Tab vue  Q quitter   ║
+╚════════════════════════════════════════════════════╝
+```
+
+| Touche | Action |
+|---|---|
+| ↑ ↓ | Choisir une ligne |
+| ← → | Jour précédent ou suivant (semaine précédente ou suivante dans la vue Semaine) |
+| Espace | Cocher une tâche, ou la rouvrir |
+| ! | Rendre une tâche prioritaire, ou non |
+| R | Reporter la tâche à demain |
+| A | Abandonner la tâche |
+| T, E, N | Ajouter une tâche, un événement, une note |
+| Tab | Passer d'une vue à l'autre : Jour, Semaine, Mois, Chercher |
+| Entrée | Dans Semaine, Mois ou Chercher : ouvrir le jour choisi |
+| M | Dans Mois : reporter à aujourd'hui les tâches restées ouvertes |
+| Q, Échap | Quitter |
+
+Un écran plein se lit mal avec un lecteur d'écran : toutes les actions restent possibles avec
+les commandes ci-dessous, qui écrivent du texte simple.
+
 ## Commandes
 
 | Commande | Ce qu'elle fait |
 |---|---|
-| `anais` | La page du jour. |
+| `anais jour` | La page du jour, en texte simple (aussi quand la sortie n'est pas un terminal). |
 | `anais hier`, `anais demain`, `anais 2026-11-17` | Une autre page. |
 | `anais migrer` | Reporte à aujourd'hui toutes les tâches restées ouvertes les jours passés. |
 | `anais semaine` | Les jours de la semaine où quelque chose est noté. |
