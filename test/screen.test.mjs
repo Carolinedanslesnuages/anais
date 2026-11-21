@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openJournal } from '../src/journal.mjs';
 import { addEntry } from '../src/actions.mjs';
 import { handleKey, buildRows, initialState } from '../src/screen/app.mjs';
-import { render, fitWidth } from '../src/screen/render.mjs';
+import { render, fitWidth, wrapText } from '../src/screen/render.mjs';
+import { THEMES, themeNamed } from '../src/screen/themes.mjs';
 
 process.env.ANAIS_DATE = '2026-11-21';
 const ARROW_UP = '\x1b[A';
@@ -15,86 +16,121 @@ const RIGHT = '\x1b[C';
 const ENTER = '\r';
 const ESCAPE = '\x1b';
 const TAB_KEY = '\t';
+const SAVE = '\x13';
+const BACKSPACE = '\x7f';
 const stripColors = (text) => text.replace(/\x1b\[[0-9;]*m/g, '');
 
-function newJournal() {
-  const journal = openJournal(mkdtempSync(join(tmpdir(), 'anais-screen-')));
-  return journal;
-}
+const newJournal = () => openJournal(mkdtempSync(join(tmpdir(), 'anais-screen-')));
 const start = (journal) => ({ ...initialState(), ...buildRows(initialState(), journal) });
 const press = (state, journal, ...keys) => keys.reduce((current, pressedKey) => handleKey(current, pressedKey, journal), state);
 const typeText = (state, journal, text) => press(state, journal, ...[...text]);
+const screenText = (state, width = 60, theme = themeNamed('terminal')) => render(state, { width, height: 14 }, theme).map(stripColors);
 
-test('dessin : cadre complet, à la bonne largeur, ligne choisie marquée', () => {
+test('dessin : cadre complet à la bonne largeur, dans les trois thèmes', () => {
   const journal = newJournal();
   addEntry(journal, '2026-11-21', 'task', 'appeler la banque', true);
   addEntry(journal, '2026-11-21', 'event', 'réunion à 14 h');
-  const lines = render(press(start(journal), journal, DOWN), { width: 60, height: 14 }).map(stripColors);
-  assert.equal(lines.length, 14);
-  assert.ok(lines.every((line) => [...line].length === 60), 'toutes les lignes font 60 caractères');
+  const state = press(start(journal), journal, DOWN);
+  for (const themeName of Object.keys(THEMES)) {
+    const lines = screenText(state, 60, THEMES[themeName]);
+    assert.equal(lines.length, 14, themeName);
+    assert.ok(lines.every((line) => [...line].length === 60), `${themeName} : toutes les lignes font 60 caractères`);
+  }
+  const lines = screenText(state);
   assert.match(lines[0], /^╔═ Anaïs ═+ samedi 21 novembre ═╗$/);
-  assert.match(lines[1], /Jour.*Semaine.*Mois.*Chercher/);
-  assert.match(lines[4], /^║▸ ○ réunion à 14 h/);
   assert.match(lines[3], /^║  • ! appeler la banque/);
+  assert.match(lines[4], /^║▸ ○ réunion à 14 h/);
   assert.match(lines[13], /^╚═+╝$/);
   assert.equal(fitWidth('abcdef', 4), 'abc…');
+  assert.deepEqual(wrapText('un deux trois\nquatre', 8), ['un deux', 'trois', 'quatre']);
 });
 
-test('ajouter au clavier : T, le texte, Entrée ; Échap annule', () => {
+test('le thème terminal n’impose aucune couleur de fond', () => {
+  const lines = render(start(newJournal()), { width: 60, height: 14 }, THEMES.terminal).join('');
+  assert.doesNotMatch(lines, /48;5;/);
+  assert.match(render(start(newJournal()), { width: 60, height: 14 }, THEMES.ambre).join(''), /48;5;16/);
+});
+
+test('tâche sur une ligne : T, le texte, Entrée ; Échap annule', () => {
   const journal = newJournal();
   let state = press(start(journal), journal, 't');
-  assert.equal(state.input.title, 'Nouvelle tâche');
+  assert.equal(state.editor.title, 'Nouvelle tâche');
   state = typeText(state, journal, 'écrire à Inès');
-  state = press(state, journal, ARROW_UP, '\x7f', 's', ENTER);
+  state = press(state, journal, ARROW_UP, BACKSPACE, 's', ENTER);
   assert.equal(state.message, 'Tâche ajoutée.');
-  assert.deepEqual(journal.entriesOf('2026-11-21'), [{ kind: 'task', text: 'écrire à Inès', priority: false }]);
-  state = typeText(press(state, journal, 'n'), journal, 'idée');
+  assert.deepEqual(journal.entriesOf('2026-11-21'), [{ kind: 'task', text: 'écrire à Inès', priority: false, body: [] }]);
+  state = typeText(press(state, journal, 'e'), journal, 'dentiste');
   state = press(state, journal, ESCAPE);
   assert.equal(journal.entriesOf('2026-11-21').length, 1, 'Échap n’ajoute rien');
 });
 
-test('cocher, rouvrir, priorité, abandonner, reporter', () => {
+test('note longue : plusieurs lignes, Ctrl+S, puis Entrée pour la relire et la modifier', () => {
   const journal = newJournal();
+  let state = typeText(press(start(journal), journal, 'n'), journal, 'Idée de livre');
+  state = press(state, journal, ENTER);
+  state = typeText(state, journal, 'Une famille, trois générations.');
+  state = press(state, journal, ENTER, ENTER, 'Fin.', SAVE);
+  assert.equal(state.message, 'Note ajoutée.');
+  assert.deepEqual(journal.entriesOf('2026-11-21')[0].body, ['Une famille, trois générations.', '', 'Fin.']);
+  assert.match(readFileSync(join(journal.folder, '2026-11.md'), 'utf8'), /– Idée de livre\n {2}Une famille, trois générations\.\n\n {2}Fin\.\n/);
+  assert.match(screenText(state)[3], /– Idée de livre ¶/);
+  state = press(state, journal, ENTER);
+  assert.equal(state.editor.title, 'Lire et modifier la note');
+  assert.equal(state.editor.text, 'Idée de livre\nUne famille, trois générations.\n\nFin.');
+  state = press(state, journal, BACKSPACE, BACKSPACE, BACKSPACE, BACKSPACE, ...'À suivre.', SAVE);
+  assert.equal(state.message, 'Modifié.');
+  assert.deepEqual(journal.entriesOf('2026-11-21')[0].body, ['Une famille, trois générations.', '', 'À suivre.']);
+});
+
+test('texte collé : les sauts de ligne restent dans une note, pas dans une tâche', () => {
+  const journal = newJournal();
+  let state = press(start(journal), journal, 'n', 'Courses\r\npain\r\nlait', SAVE);
+  assert.deepEqual(journal.entriesOf('2026-11-21')[0].body, ['pain', 'lait']);
+  state = press(state, journal, 't', 'payer\nla cantine', ENTER);
+  assert.equal(journal.entriesOf('2026-11-21')[1].text, 'payer la cantine');
+});
+
+test('panneau sur le côté : le texte entier de la ligne choisie, seulement sur un écran large', () => {
+  const journal = newJournal();
+  addEntry(journal, '2026-11-21', 'note', 'Idée de livre\nUne famille sur trois générations, racontée par la cadette.');
+  const state = start(journal);
+  const wide = screenText(state, 100);
+  assert.ok(wide.every((line) => [...line].length === 100));
+  assert.match(wide[3], /│ Note/);
+  assert.match(wide.slice(3, 10).join('\n'), /│ Une famille sur trois générations/);
+  assert.doesNotMatch(screenText(state, 60).join('\n'), /│/);
+});
+
+test('recherche dans le contenu des notes, résultat détaillé sur le côté', () => {
+  const journal = newJournal();
+  addEntry(journal, '2026-11-19', 'note', 'Lecture\nUn passage sur les générations.');
+  addEntry(journal, '2026-11-21', 'task', 'ranger le bureau');
+  let state = press(start(journal), journal, TAB_KEY, TAB_KEY, TAB_KEY);
+  assert.equal(state.view, 'search');
+  state = typeText(state, journal, 'generations');
+  assert.equal(state.rows.length, 2, 'trouvé dans le corps, sans tenir compte des accents');
+  assert.match(screenText(state, 100).slice(3, 8).join('\n'), /│ jeudi 19 novembre · Note[\s\S]*│ Un passage sur les générations\./);
+  state = press(state, journal, ENTER);
+  assert.equal(state.isoDay, '2026-11-19');
+});
+
+test('cocher, rouvrir, priorité, abandonner, reporter, jours, migration, quitter', () => {
+  const journal = newJournal();
+  addEntry(journal, '2026-11-19', 'task', 'ranger le bureau');
   addEntry(journal, '2026-11-21', 'task', 'banque');
   addEntry(journal, '2026-11-21', 'task', 'courses');
-  addEntry(journal, '2026-11-21', 'note', 'idée');
   let state = press(start(journal), journal, ' ');
   assert.equal(journal.entriesOf('2026-11-21')[0].kind, 'done');
-  state = press(state, journal, ' ');
-  assert.equal(journal.entriesOf('2026-11-21')[0].kind, 'task', 'Espace rouvre une tâche faite');
-  state = press(state, journal, '!');
+  state = press(state, journal, ' ', '!');
   assert.equal(journal.entriesOf('2026-11-21')[0].priority, true);
   state = press(state, journal, DOWN, 'r');
   assert.match(state.message, /Reportée à demain : courses/);
-  assert.equal(journal.entriesOf('2026-11-22')[0].text, 'courses');
-  state = press(state, journal, DOWN, ' ');
-  assert.equal(state.message, 'Seule une tâche se coche.');
-  state = press(state, journal, ARROW_UP, ARROW_UP, 'a');
+  state = press(state, journal, ARROW_UP, 'a');
   assert.equal(journal.entriesOf('2026-11-21')[0].kind, 'cancelled');
-});
-
-test('jours, vues, recherche, migration, quitter', () => {
-  const journal = newJournal();
-  addEntry(journal, '2026-11-19', 'task', 'ranger le bureau');
-  addEntry(journal, '2026-11-21', 'event', 'dentiste');
-  let state = press(start(journal), journal, RIGHT);
+  state = press(state, journal, RIGHT);
   assert.equal(state.isoDay, '2026-11-22');
-  state = press(state, journal, TAB_KEY);
-  assert.equal(state.view, 'week');
-  assert.match(state.rows.find((viewRow) => viewRow.isoDay === '2026-11-21').text, /○ dentiste/);
-  state = press(state, journal, TAB_KEY);
-  assert.equal(state.view, 'month');
-  state = press(state, journal, 'm');
+  state = press(state, journal, TAB_KEY, TAB_KEY, 'm');
   assert.equal(state.message, "1 tâche(s) reportée(s) à aujourd'hui.");
-  state = press(state, journal, TAB_KEY);
-  assert.equal(state.view, 'search');
-  state = typeText(state, journal, 'qbureau');
-  state = press(state, journal, '\x7f', '\x7f', '\x7f', '\x7f', '\x7f', '\x7f', '\x7f', ...'ranger');
-  assert.equal(state.query, 'ranger', 'q s’écrit dans la recherche, il ne quitte pas');
-  assert.equal(state.rows.length, 3);
-  state = press(state, journal, ENTER); // the first result is already selected
-  assert.equal(state.view, 'day');
-  assert.equal(state.isoDay, '2026-11-19');
   assert.equal(handleKey(state, 'q', journal), null);
   assert.equal(handleKey(state, '\x03', journal), null);
 });

@@ -6,11 +6,13 @@ import { openJournal } from '../src/journal.mjs';
 import { today, addDays, weekStart, monthOf, dayLabel } from '../src/dates.mjs';
 import { dayBlock, entryLine, pink, muted } from '../src/display.mjs';
 import { runScreen } from '../src/screen/app.mjs';
+import { THEMES, DEFAULT_THEME, themeNamed } from '../src/screen/themes.mjs';
+import { readSettings, saveSetting } from '../src/settings.mjs';
 import { addEntry, setTaskKind, postpone, migrateOpenTasks, searchEntries } from '../src/actions.mjs';
 
 const HELP = `Anaïs · ton bullet journal dans le terminal
 
-  anais                      l'écran du journal (↑↓, Espace, T, E, N, Tab, Q)
+  anais                      l'écran du journal (↑↓, Espace, T, E, N, Entrée, Tab, Q)
   anais jour                 la page du jour, sans l'écran
   anais t <texte>            ajoute une tâche          •   (anais t ! <texte> : prioritaire)
   anais e <texte>            ajoute un événement       ○
@@ -23,6 +25,7 @@ const HELP = `Anaïs · ton bullet journal dans le terminal
   anais semaine · mois       la semaine, le mois
   anais chercher <mots>      dans tout le journal
   anais dossier              où est rangé le journal
+  anais theme [nom]          les couleurs de l'écran : terminal (défaut), ambre, sauge
 
 Le journal est fait de fichiers Markdown (un par mois), dans ~/.anais ou ANAIS_DOSSIER :
 il se lit et se modifie aussi à la main.`;
@@ -51,6 +54,18 @@ function changeFromCommand(numberText, kind, message) {
 function postponeFromCommand(numberText, target) {
   const { entry, targetDay } = postpone(journal, today(), Number(numberText) - 1, target);
   console.log(`Reportée au ${dayLabel(targetDay)} : ${entry.text}`);
+}
+
+function currentThemeName() {
+  return process.env.ANAIS_THEME || readSettings(journal.folder).theme || DEFAULT_THEME;
+}
+
+function chooseTheme(name) {
+  const names = Object.keys(THEMES);
+  if (!name) return console.log(`Thème : ${currentThemeName()}. Thèmes : ${names.join(', ')}.`);
+  if (!THEMES[name]) throw new Error(`Thème inconnu : ${name}. Thèmes : ${names.join(', ')}.`);
+  saveSetting(journal.folder, 'theme', name);
+  console.log(`Thème « ${name} » choisi. Tapez « anais » pour le voir.`);
 }
 
 function migrate() {
@@ -99,7 +114,7 @@ function main() {
   const [command, ...words] = process.argv.slice(2);
   if (!command) {
     // The full-screen interface needs a real terminal; otherwise (pipe, script) print the page.
-    if (process.stdin.isTTY && process.stdout.isTTY) return runScreen(journal);
+    if (process.stdin.isTTY && process.stdout.isTTY) return runScreen(journal, themeNamed(currentThemeName()));
     return showDay(today());
   }
   if (KIND_OF_COMMAND[command]) return addFromCommand(KIND_OF_COMMAND[command], words);
@@ -117,6 +132,7 @@ function main() {
     case 'mois': return showMonth();
     case 'chercher': return search(words);
     case 'dossier': return console.log(journal.folder);
+    case 'theme': return chooseTheme(words[0]);
     default: throw new Error(`Commande inconnue : ${command}. Tapez « anais aide ».`);
   }
 }

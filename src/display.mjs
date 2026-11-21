@@ -20,6 +20,9 @@ export function dayBlock(isoDay, entries, { isToday = false } = {}) {
   const title = `${dayLabel(isoDay)}${isToday ? ' · aujourd’hui' : ''}`;
   const lines = [bold(pink(title))];
   if (!entries.length) lines.push(muted('   (rien pour l’instant)'));
-  entries.forEach((entry, index) => lines.push(entryLine(entry, index + 1)));
+  entries.forEach((entry, index) => {
+    lines.push(entryLine(entry, index + 1));
+    for (const bodyLine of entry.body || []) lines.push(muted(`      ${bodyLine}`));
+  });
   return lines.join('\n');
 }
