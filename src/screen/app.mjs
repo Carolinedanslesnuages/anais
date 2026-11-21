@@ -2,10 +2,15 @@
  * The full-screen interface: state, keys and the main loop. The state logic (buildRows,
  * handleKey) is separate from the terminal, so it can be tested without one.
  */
-import { addDays, today, weekStart, monthOf, dayLabel } from '../dates.mjs';
+import { addDays, today } from '../dates.mjs';
 import { fullText } from '../journal.mjs';
-import { addEntry, editEntry, toggleDone, togglePriority, postpone, migrateOpenTasks, setTaskKind, searchEntries } from '../actions.mjs';
-import { render, VIEWS, entryText } from './render.mjs';
+import { addEntry, editEntry, toggleDone, togglePriority, postpone, migrateOpenTasks, setTaskKind, setMood, answerEvening } from '../actions.mjs';
+import { memoriesOf } from '../memories.mjs';
+import { render, VIEWS } from './render.mjs';
+import { buildRows, eveningTitle } from './views.mjs';
+import { companionMood, allTasksDone, PARTY_FRAMES, PARTY_STEP_MS } from './cloud.mjs';
+
+export { buildRows };
 
 const KEYS = {
   '\x1b[A': 'up', '\x1b[B': 'down', '\x1b[C': 'right', '\x1b[D': 'left', '\t': 'tab', '\x1b[Z': 'shift-tab',
@@ -16,56 +21,14 @@ const NEW_TITLES = { task: 'Nouvelle tâche', event: 'Nouvel événement', note:
 const ADDED_MESSAGES = { task: 'Tâche ajoutée.', event: 'Événement ajouté.', note: 'Note ajoutée.' };
 const KIND_NAMES = { task: 'la tâche', done: 'la tâche', migrated: 'la tâche', cancelled: 'la tâche', event: 'l’événement', note: 'la note' };
 const KIND_KEYS = { t: 'task', e: 'event', n: 'note' };
-const KIND_LABELS = { task: 'Tâche', done: 'Tâche faite', migrated: 'Tâche reportée', cancelled: 'Tâche abandonnée', event: 'Événement', note: 'Note' };
-const detailHeading = (entry) => `${KIND_LABELS[entry.kind]}${entry.priority ? ' · prioritaire' : ''}`;
 
 /** A key that types text (not an arrow, Enter, Tab…). */
 const isText = (pressedKey) => !NAMED_KEYS.has(pressedKey) && !pressedKey.startsWith('\x1b') && pressedKey >= ' ';
 
-export const initialState = () => ({ view: 'day', isoDay: today(), selected: 0, rows: [], message: '', editor: null, query: '' });
+export const initialState = () => ({ view: 'day', isoDay: today(), selected: 0, rows: [], message: '', editor: null, query: '', showHelp: false, justTicked: false, partyFrame: null });
 
-const shortDay = (isoDay) => dayLabel(isoDay).split(' ').slice(0, 2).join(' ');
-
-/** Rows of the current view, from the journal. */
-export function buildRows(state, journal) {
-  if (state.view === 'day') {
-    const rows = journal.entriesOf(state.isoDay).map((entry, index) => ({
-      text: entryText(entry),
-      selectable: true,
-      index,
-      muted: ['done', 'migrated', 'cancelled'].includes(entry.kind),
-      detail: { heading: detailHeading(entry), text: fullText(entry) },
-    }));
-    return { rows, emptyText: 'Rien pour l’instant. T pour une tâche, E pour un événement, N pour une note.' };
-  }
-  if (state.view === 'week') {
-    const firstDay = weekStart(state.isoDay);
-    const rows = Array.from({ length: 7 }, (unused, offset) => {
-      const isoDay = addDays(firstDay, offset);
-      const entries = journal.entriesOf(isoDay);
-      const open = entries.filter((entry) => entry.kind === 'task').length;
-      const events = entries.filter((entry) => entry.kind === 'event').map((entry) => entry.text);
-      return { text: `${shortDay(isoDay).padEnd(12)} ${open} •  ${events.length ? `○ ${events.join(' · ')}` : ''}`, selectable: true, isoDay, muted: !entries.length };
-    });
-    return { rows, emptyText: '' };
-  }
-  if (state.view === 'month') {
-    const days = journal.allDays().filter((isoDay) => isoDay.startsWith(monthOf(state.isoDay)));
-    const rows = days.map((isoDay) => {
-      const entries = journal.entriesOf(isoDay);
-      const count = (kind) => entries.filter((entry) => entry.kind === kind).length;
-      return { text: `${shortDay(isoDay).padEnd(12)} ${count('done')} ×  ${count('task')} •  ${count('event')} ○`, selectable: true, isoDay };
-    });
-    return { rows, emptyText: 'Rien de noté ce mois-ci.' };
-  }
-  const results = searchEntries(journal, state.query).map(({ isoDay, entry }) => ({
-    text: `${shortDay(isoDay).padEnd(12)} ${entryText(entry)}`,
-    selectable: true,
-    isoDay,
-    detail: { heading: `${dayLabel(isoDay)} · ${detailHeading(entry)}`, text: fullText(entry) },
-  }));
-  return { rows: [{ text: `Chercher : ${state.query}▌`, selectable: false }, ...results], emptyText: '' };
-}
+/** The current hour (ANAIS_HEURE in the tests). */
+const currentHour = () => (process.env.ANAIS_HEURE !== undefined ? Number(process.env.ANAIS_HEURE) : new Date().getHours());
 
 const selectableIndexes = (rows) => rows.map((viewRow, index) => (viewRow.selectable ? index : -1)).filter((index) => index >= 0);
 
@@ -75,7 +38,11 @@ function clampSelection(state) {
   return { ...state, selected: selectable.includes(state.selected) ? state.selected : selectable[0] };
 }
 
-const refresh = (state, journal) => clampSelection({ ...state, ...buildRows(state, journal) });
+function refresh(state, journal) {
+  const page = journal.pageOf(state.isoDay);
+  const companion = companionMood({ page, hour: currentHour(), justTicked: state.justTicked, partyFrame: state.partyFrame });
+  return clampSelection({ ...state, ...buildRows(state, journal), companion, moodEmoji: page.mood ? page.mood.emoji : '' });
+}
 
 function moveSelection(state, step) {
   const selectable = selectableIndexes(state.rows);
@@ -108,6 +75,10 @@ function handleEditorKey(state, pressedKey, journal) {
   if (saves) {
     if (!editor.text.trim()) return { ...state, editor: null };
     return withError({ ...state, editor: null }, () => {
+      if (editor.evening) {
+        answerEvening(journal, state.isoDay, editor.text);
+        return 'Réponse du soir notée.';
+      }
       if (editor.index !== undefined) {
         editEntry(journal, state.isoDay, editor.index, editor.text);
         return 'Modifié.';
@@ -132,12 +103,20 @@ function handleDayKey(state, pressedKey, journal) {
     return { ...state, editor: { kind, title: NEW_TITLES[kind], text: '', multiline: kind === 'note' } };
   }
   if (pressedKey === 'left' || pressedKey === 'right') return { ...state, isoDay: addDays(state.isoDay, pressedKey === 'left' ? -1 : 1), selected: 0 };
+  if (lower === 'h') return { ...state, view: 'moods', selected: 0 };
+  if (lower === 's') {
+    const page = journal.pageOf(state.isoDay);
+    return { ...state, editor: { evening: true, title: eveningTitle(journal, state.isoDay), text: page.evening ? page.evening.answer : '', multiline: false } };
+  }
   if (!viewRow) return state;
   const entry = journal.entriesOf(state.isoDay)[viewRow.index];
   if (pressedKey === 'enter') return { ...state, editor: { index: viewRow.index, title: `Lire et modifier ${KIND_NAMES[entry.kind]}`, text: fullText(entry), multiline: true } };
   if (pressedKey === ' ') {
     const toggled = toggleDone(journal, state.isoDay, viewRow.index);
-    return { ...state, message: toggled ? (toggled.kind === 'done' ? `Faite : ${toggled.text}` : `Rouverte : ${toggled.text}`) : 'Seule une tâche se coche.' };
+    if (!toggled) return { ...state, message: 'Seule une tâche se coche.' };
+    if (toggled.kind !== 'done') return { ...state, message: `Rouverte : ${toggled.text}` };
+    const party = allTasksDone(journal.pageOf(state.isoDay));
+    return { ...state, justTicked: true, partyFrame: party ? 0 : null, message: party ? 'Tout est fait pour aujourd’hui ✦' : `Faite : ${toggled.text}` };
   }
   if (pressedKey === '!') return { ...state, message: togglePriority(journal, state.isoDay, viewRow.index) ? 'Priorité changée.' : 'Seule une tâche ouverte peut être prioritaire.' };
   if (lower === 'a') return withError(state, () => `Abandonnée : ${setTaskKind(journal, state.isoDay, viewRow.index, 'cancelled').text}`);
@@ -154,12 +133,23 @@ function handleSearchKey(state, pressedKey) {
   return state;
 }
 
+function handleMoodKey(state, pressedKey, journal) {
+  const viewRow = state.rows[state.selected];
+  if (pressedKey === 'escape' || pressedKey === 'q' || pressedKey === 'Q') return { ...state, view: 'day', selected: 0 };
+  if (pressedKey !== 'enter' || !viewRow) return state;
+  setMood(journal, state.isoDay, viewRow.mood);
+  return { ...state, view: 'day', selected: 0, message: viewRow.mood ? `Humeur : ${viewRow.mood.emoji} ${viewRow.mood.name}` : 'Humeur retirée.' };
+}
+
 /** Applies a key; returns the new state, or null to quit. */
 export function handleKey(state, pressedKey, journal) {
   const named = KEYS[pressedKey] || pressedKey;
-  let next = { ...state, message: '' };
+  let next = { ...state, message: '', justTicked: false, partyFrame: null, showHelp: false };
   if (named === 'quit') return null;
+  if (state.showHelp) return refresh(next, journal);
   if (state.editor) next = handleEditorKey(next, named, journal);
+  else if (state.view === 'moods') next = state.rows.length && (named === 'up' || named === 'down') ? moveSelection(next, named === 'up' ? -1 : 1) : handleMoodKey(next, named, journal);
+  else if (named === '?') next = { ...next, showHelp: true };
   else if (named === 'tab' || named === 'shift-tab') next = switchView(next, named === 'tab' ? 1 : -1);
   else if (named === 'up' || named === 'down') next = moveSelection(next, named === 'up' ? -1 : 1);
   else if (state.view === 'search') next = handleSearchKey(next, named);
@@ -175,9 +165,13 @@ export function handleKey(state, pressedKey, journal) {
 }
 
 /** Runs the interface in the terminal until the user quits. */
-export function runScreen(journal, theme) {
+/** `animations: false` keeps the party still (one frame, no movement). */
+export function runScreen(journal, theme, { animations = true } = {}) {
   const { stdin, stdout } = process;
-  let state = refresh(initialState(), journal);
+  const memories = memoriesOf(journal, today());
+  const memoryMessage = memories.length ? `${memories[0].label} : ${memories[0].mood ? `${memories[0].mood.emoji} ` : ''}${memories[0].firstLine}` : '';
+  let state = refresh({ ...initialState(), message: memoryMessage }, journal);
+  let partyTimer = null;
   const draw = () => {
     const size = { width: Math.max(40, Math.min(stdout.columns || 80, 140)), height: Math.max(12, stdout.rows || 24) };
     stdout.write('\x1b[H' + render(state, size, theme).join('\x1b[K\n') + '\x1b[K\x1b[J');
@@ -201,6 +195,17 @@ export function runScreen(journal, theme) {
       }
       state = next;
       draw();
+      if (state.partyFrame === 0 && animations && !partyTimer) {
+        partyTimer = setInterval(() => {
+          const frame = state.partyFrame === null ? PARTY_FRAMES : state.partyFrame + 1;
+          state = refresh({ ...state, partyFrame: frame < PARTY_FRAMES ? frame : null }, journal);
+          draw();
+          if (state.partyFrame === null) {
+            clearInterval(partyTimer);
+            partyTimer = null;
+          }
+        }, PARTY_STEP_MS);
+      }
     } catch (error) {
       restore();
       console.error(`anais : ${error.message}`);

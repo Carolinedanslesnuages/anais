@@ -11,49 +11,39 @@ export const VIEWS = [['day', 'Jour'], ['week', 'Semaine'], ['month', 'Mois'], [
 /** Below this width, there is no room for the side panel. */
 export const PANEL_MIN_WIDTH = 84;
 
-const characters = (text) => [...String(text)];
+import { displayWidth, fitWidth, wrapText } from '../text-width.mjs';
+import { cloudLines, faceOf } from './cloud.mjs';
 
-/** Cuts or pads a text to an exact width (in characters). */
-export function fitWidth(text, width) {
-  const chars = characters(text);
-  if (width <= 0) return '';
-  return chars.length > width ? chars.slice(0, width - 1).join('') + '…' : String(text) + ' '.repeat(width - chars.length);
-}
-
-/** Wraps a text (with line breaks) into lines of at most `width` characters, cutting at spaces. */
-export function wrapText(text, width) {
-  const lines = [];
-  for (const paragraph of String(text).split('\n')) {
-    let current = '';
-    for (const word of paragraph.split(' ')) {
-      let rest = word;
-      while (characters(rest).length > width) {
-        if (current) lines.push(current);
-        lines.push(characters(rest).slice(0, width).join(''));
-        rest = characters(rest).slice(width).join('');
-        current = '';
-      }
-      const candidate = current ? `${current} ${rest}` : rest;
-      if (characters(candidate).length > width) {
-        lines.push(current);
-        current = rest;
-      } else current = candidate;
-    }
-    lines.push(current);
-  }
-  return lines;
-}
+export { fitWidth, wrapText };
 
 export const entryText = (entry) => `${SYMBOLS[entry.kind]} ${entry.priority ? '! ' : ''}${entry.text}${entry.body && entry.body.length ? ' ¶' : ''}`;
 
 const HELP_BY_VIEW = {
-  day: ['↑↓ ←→ choisir  Espace fait  ! priorité  R reporter', 'T E N ajouter  Entrée lire  Tab vue  Q quitter'],
+  day: ['↑↓ ←→ choisir  Espace fait  T E N ajouter  ? aide', 'Entrée lire  H humeur  S soir  Tab vue  Q quitter'],
   week: ['↑↓ choisir un jour  Entrée l’ouvrir  ←→ semaine', 'Tab vue  Q quitter'],
   month: ['↑↓ choisir un jour  Entrée l’ouvrir  M migrer', 'Tab vue  Q quitter'],
   search: ['Tapez vos mots  ↑↓ choisir  Entrée ouvrir le jour', 'Tab vue  Échap quitter la recherche'],
+  moods: ['↑↓ choisir une humeur  Entrée la garder', 'Échap annuler'],
   editor: ['Entrée : à la ligne  Ctrl+S : enregistrer', 'Échap : annuler'],
   quickInput: ['Entrée : noter', 'Échap : annuler'],
+  help: ['Une touche pour revenir', ''],
 };
+
+/** Every key of the day page, shown with "?". */
+export const FULL_HELP = [
+  '↑ ↓      choisir une ligne',
+  '← →      jour précédent, jour suivant',
+  'Espace   cocher une tâche, ou la rouvrir',
+  '!        tâche prioritaire, ou non',
+  'R        reporter la tâche à demain',
+  'A        abandonner la tâche',
+  'T E N    ajouter une tâche, un événement, une note',
+  'Entrée   lire et modifier la ligne (Ctrl+S enregistre)',
+  'H        humeur du jour',
+  'S        question du soir',
+  'Tab      Jour, Semaine, Mois, Chercher',
+  'Q        quitter',
+];
 
 function frameParts(theme, width) {
   const edge = (left, fill, right) => theme.frame + left + fill.repeat(width - 2) + right + RESET_CODE;
@@ -62,9 +52,9 @@ function frameParts(theme, width) {
 }
 
 function titleLine(state, theme, width) {
-  const left = '═ Anaïs ';
-  const right = ` ${dayLabel(state.isoDay)} ═`;
-  const fill = Math.max(0, width - 2 - characters(left).length - characters(right).length);
+  const left = `═ Anaïs ${faceOf(state.companion || 'calm')} `;
+  const right = ` ${dayLabel(state.isoDay)}${state.moodEmoji ? ` · ${state.moodEmoji}` : ''} ═`;
+  const fill = Math.max(0, width - 2 - displayWidth(left) - displayWidth(right));
   return theme.frame + '╔' + left + '═'.repeat(fill) + right + '╗' + RESET_CODE;
 }
 
@@ -74,7 +64,7 @@ function menuLine(state, theme, width) {
   for (const [view, label] of VIEWS) {
     const item = ` ${label} `;
     line += (view === state.view ? theme.barActive : theme.bar) + item + theme.bar + ' ';
-    used += characters(item).length + 1;
+    used += displayWidth(item) + 1;
   }
   return line + ' '.repeat(Math.max(0, width - 2 - used)) + theme.frame + '║' + RESET_CODE;
 }
@@ -100,11 +90,17 @@ function listCell(state, theme, rowIndex, firstRow, width) {
   return style + fitWidth(`${isSelected ? '▸ ' : '  '}${viewRow.text}`, width);
 }
 
-/** Lines of the side panel: the selected line's heading and whole text. */
-function panelLines(state, width) {
+/** Lines of the side panel: the selected line's detail, with the cloud at the bottom of the day page. */
+function panelLines(state, width, height) {
   const viewRow = state.rows[state.selected];
-  if (!viewRow || !viewRow.detail) return [];
-  return [viewRow.detail.heading, '', ...wrapText(viewRow.detail.text, width)];
+  const detail = (viewRow && viewRow.detail) || state.panelDetail;
+  const lines = detail ? [detail.heading, '', ...(detail.lines || wrapText(detail.text, width))] : [];
+  if (state.view === 'day' && height >= lines.length + 4) {
+    const cloud = cloudLines(state.companion || 'calm', state.partyFrame ?? null);
+    while (lines.length < height - cloud.length) lines.push('');
+    lines.push(...cloud);
+  }
+  return lines;
 }
 
 export function render(state, { width, height }, theme = themeNamed()) {
@@ -113,13 +109,16 @@ export function render(state, { width, height }, theme = themeNamed()) {
   const contentHeight = Math.max(3, height - 7);
   const lines = [titleLine(state, theme, width), menuLine(state, theme, width), edge('╟', '─', '╢')];
 
-  if (state.editor) {
+  if (state.showHelp) {
+    const helpLines = FULL_HELP.length > contentHeight ? [...FULL_HELP.slice(0, contentHeight - 1), '… agrandissez la fenêtre pour voir la suite'] : FULL_HELP;
+    for (let rowIndex = 0; rowIndex < contentHeight; rowIndex++) lines.push(boxed(fitWidth(`  ${helpLines[rowIndex] ?? ''}`, innerWidth), theme.body));
+  } else if (state.editor) {
     for (const content of editorRows(state.editor, theme, innerWidth, contentHeight)) lines.push(boxed(content, ''));
   } else {
-    const withPanel = width >= PANEL_MIN_WIDTH && (state.view === 'day' || state.view === 'search');
+    const withPanel = width >= PANEL_MIN_WIDTH && ['day', 'search', 'month'].includes(state.view);
     const listWidth = withPanel ? Math.floor((innerWidth - 1) / 2) : innerWidth;
     const panelWidth = innerWidth - 1 - listWidth;
-    const panel = withPanel ? panelLines(state, panelWidth - 2) : [];
+    const panel = withPanel ? panelLines(state, panelWidth - 2, contentHeight) : [];
     const firstRow = Math.max(0, Math.min(state.selected - contentHeight + 1, state.rows.length - contentHeight));
     for (let rowIndex = 0; rowIndex < contentHeight; rowIndex++) {
       let content = listCell(state, theme, rowIndex, firstRow, listWidth);
@@ -132,7 +131,7 @@ export function render(state, { width, height }, theme = themeNamed()) {
   }
 
   lines.push(edge('╟', '─', '╢'));
-  const helpKey = state.editor ? (state.editor.multiline ? 'editor' : 'quickInput') : state.view;
+  const helpKey = state.showHelp ? 'help' : state.editor ? (state.editor.multiline ? 'editor' : 'quickInput') : state.view;
   const [firstHelp, secondHelp] = HELP_BY_VIEW[helpKey];
   lines.push(boxed(fitWidth(` ${state.message || firstHelp}`, innerWidth), state.message ? theme.message : theme.bar));
   lines.push(boxed(fitWidth(` ${secondHelp}`, innerWidth), theme.bar));
