@@ -2,8 +2,6 @@
  * The evening question: one per day, the same all day long, chosen from the date. These questions
  * were written for Anaïs.
  */
-import { parseIsoDate } from './dates.mjs';
-
 export const EVENING_QUESTIONS = [
   'Qu’est-ce qui t’a fait sourire aujourd’hui ?',
   'Qu’as-tu appris aujourd’hui ?',
@@ -40,6 +38,8 @@ export const EVENING_QUESTIONS = [
 
 /** The question of a day: always the same for a given date. */
 export function questionOf(isoDay) {
-  const daysSinceEpoch = Math.floor(parseIsoDate(isoDay).getTime() / 86400000);
+  // From the calendar date alone, so the question is the same in every time zone.
+  const [year, month, dayNumber] = isoDay.split('-').map(Number);
+  const daysSinceEpoch = Math.floor(Date.UTC(year, month - 1, dayNumber) / 86400000);
   return EVENING_QUESTIONS[((daysSinceEpoch % EVENING_QUESTIONS.length) + EVENING_QUESTIONS.length) % EVENING_QUESTIONS.length];
 }

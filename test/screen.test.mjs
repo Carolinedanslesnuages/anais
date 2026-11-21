@@ -1,4 +1,7 @@
 import { test } from 'node:test';
+import { questionOf } from '../src/evening.mjs';
+
+const QUESTION = questionOf('2026-11-21');
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -170,11 +173,11 @@ test('les emoji ne décalent pas le cadre', async () => {
 test('question du soir : S, la réponse, Entrée ; la question reste celle du jour', () => {
   const journal = newJournal();
   let state = press(start(journal), journal, 's');
-  assert.equal(state.editor.title, 'Qu’aimerais-tu faire autrement demain ?');
+  assert.equal(state.editor.title, QUESTION);
   state = typeText(state, journal, 'Me coucher plus tôt.');
   state = press(state, journal, ENTER);
   assert.equal(state.message, 'Réponse du soir notée.');
-  assert.deepEqual(journal.pageOf('2026-11-21').evening, { question: 'Qu’aimerais-tu faire autrement demain ?', answer: 'Me coucher plus tôt.' });
+  assert.deepEqual(journal.pageOf('2026-11-21').evening, { question: QUESTION, answer: 'Me coucher plus tôt.' });
   assert.match(screenText(state)[3], /soir : Me coucher plus tôt\./);
   assert.equal(press(state, journal, 's').editor.text, 'Me coucher plus tôt.', 'la réponse se reprend');
 });
