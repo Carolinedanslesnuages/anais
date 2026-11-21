@@ -5,10 +5,13 @@ import { join } from 'node:path';
 import { openJournal } from '../src/journal.mjs';
 import { today, addDays, weekStart, monthOf, dayLabel } from '../src/dates.mjs';
 import { dayBlock, entryLine, pink, muted } from '../src/display.mjs';
+import { runScreen } from '../src/screen/app.mjs';
+import { addEntry, setTaskKind, postpone, migrateOpenTasks, searchEntries } from '../src/actions.mjs';
 
 const HELP = `Anaïs · ton bullet journal dans le terminal
 
-  anais                      la page du jour
+  anais                      l'écran du journal (↑↓, Espace, T, E, N, Tab, Q)
+  anais jour                 la page du jour, sans l'écran
   anais t <texte>            ajoute une tâche          •   (anais t ! <texte> : prioritaire)
   anais e <texte>            ajoute un événement       ○
   anais n <texte>            ajoute une note           –
@@ -29,68 +32,30 @@ const KIND_OF_COMMAND = { t: 'task', tache: 'task', e: 'event', evenement: 'even
 const ADDED_LABEL = { task: 'Tâche ajoutée', event: 'Événement ajouté', note: 'Note ajoutée' };
 
 const journal = openJournal(process.env.ANAIS_DOSSIER || join(homedir(), '.anais'));
-const withoutAccents = (text) => text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
 function showDay(isoDay) {
   console.log(dayBlock(isoDay, journal.entriesOf(isoDay), { isToday: isoDay === today() }));
 }
 
-function addEntry(kind, words) {
+function addFromCommand(kind, words) {
   const priority = words[0] === '!';
-  const text = (priority ? words.slice(1) : words).join(' ').trim();
-  if (!text) throw new Error('Que faut-il noter ? Exemple : anais t appeler la banque');
-  const isoDay = today();
-  const entries = journal.entriesOf(isoDay);
-  entries.push({ kind, text, priority: kind === 'task' && priority });
-  journal.saveDay(isoDay, entries);
-  console.log(`${ADDED_LABEL[kind]} :\n${entryLine(entries[entries.length - 1], entries.length)}`);
+  const { entry, number } = addEntry(journal, today(), kind, (priority ? words.slice(1) : words).join(' '), priority);
+  console.log(`${ADDED_LABEL[kind]} :\n${entryLine(entry, number)}`);
 }
 
-/** The task numbered n on today's page. */
-function taskAt(entries, numberText) {
-  const index = Number(numberText) - 1;
-  const entry = entries[index];
-  if (!entry) throw new Error(`Pas d'élément n° ${numberText} aujourd'hui. Tapez « anais » pour voir la page.`);
-  if (entry.kind !== 'task') throw new Error(`L'élément n° ${numberText} n'est pas une tâche ouverte.`);
-  return entry;
-}
-
-function changeTask(numberText, newKind, message) {
-  const isoDay = today();
-  const entries = journal.entriesOf(isoDay);
-  const entry = taskAt(entries, numberText);
-  entry.kind = newKind;
-  journal.saveDay(isoDay, entries);
+function changeFromCommand(numberText, kind, message) {
+  const entry = setTaskKind(journal, today(), Number(numberText) - 1, kind);
   console.log(`${message} : ${entry.text}`);
 }
 
-function postpone(numberText, target = 'demain') {
-  const isoDay = today();
-  const targetDay = target === 'demain' ? addDays(isoDay, 1) : target;
-  if (!ISO_DAY.test(targetDay) || targetDay <= isoDay) throw new Error('Reporter à « demain » ou à un jour futur AAAA-MM-JJ.');
-  const entries = journal.entriesOf(isoDay);
-  const entry = taskAt(entries, numberText);
-  entry.kind = 'migrated';
-  journal.saveDay(isoDay, entries);
-  journal.saveDay(targetDay, [...journal.entriesOf(targetDay), { kind: 'task', text: entry.text, priority: entry.priority }]);
+function postponeFromCommand(numberText, target) {
+  const { entry, targetDay } = postpone(journal, today(), Number(numberText) - 1, target);
   console.log(`Reportée au ${dayLabel(targetDay)} : ${entry.text}`);
 }
 
 function migrate() {
-  const isoDay = today();
-  const moved = [];
-  for (const pastDay of journal.allDays().filter((candidate) => candidate < isoDay)) {
-    const entries = journal.entriesOf(pastDay);
-    const open = entries.filter((entry) => entry.kind === 'task');
-    if (!open.length) continue;
-    for (const entry of open) {
-      entry.kind = 'migrated';
-      moved.push({ kind: 'task', text: entry.text, priority: entry.priority, from: pastDay });
-    }
-    journal.saveDay(pastDay, entries);
-  }
+  const moved = migrateOpenTasks(journal, today());
   if (!moved.length) return console.log('Aucune tâche ouverte les jours précédents.');
-  journal.saveDay(isoDay, [...journal.entriesOf(isoDay), ...moved.map(({ from, ...entry }) => entry)]);
   console.log(`${moved.length} tâche${moved.length > 1 ? 's' : ''} reportée${moved.length > 1 ? 's' : ''} à aujourd'hui :`);
   for (const entry of moved) console.log(`   ${pink('>')} ${entry.text} ${muted(`(${dayLabel(entry.from)})`)}`);
 }
@@ -122,32 +87,31 @@ function showMonth() {
 }
 
 function search(words) {
-  const terms = withoutAccents(words.join(' ')).split(/\s+/).filter(Boolean);
-  if (!terms.length) throw new Error('Que faut-il chercher ? Exemple : anais chercher banque');
-  let found = 0;
-  for (const isoDay of journal.allDays()) {
-    journal.entriesOf(isoDay).forEach((entry, index) => {
-      if (!terms.every((term) => withoutAccents(entry.text).includes(term))) return;
-      if (!found) console.log(pink(`Pour « ${words.join(' ')} » :`));
-      found++;
-      console.log(`${muted(isoDay)} ${entryLine(entry, index + 1)}`);
-    });
-  }
-  if (!found) console.log(muted(`Rien trouvé pour « ${words.join(' ')} ».`));
+  const query = words.join(' ');
+  if (!query.trim()) throw new Error('Que faut-il chercher ? Exemple : anais chercher banque');
+  const results = searchEntries(journal, query);
+  if (!results.length) return console.log(muted(`Rien trouvé pour « ${query} ».`));
+  console.log(pink(`Pour « ${query} » :`));
+  for (const { isoDay, index, entry } of results) console.log(`${muted(isoDay)} ${entryLine(entry, index + 1)}`);
 }
 
 function main() {
   const [command, ...words] = process.argv.slice(2);
-  if (!command) return showDay(today());
-  if (KIND_OF_COMMAND[command]) return addEntry(KIND_OF_COMMAND[command], words);
+  if (!command) {
+    // The full-screen interface needs a real terminal; otherwise (pipe, script) print the page.
+    if (process.stdin.isTTY && process.stdout.isTTY) return runScreen(journal);
+    return showDay(today());
+  }
+  if (KIND_OF_COMMAND[command]) return addFromCommand(KIND_OF_COMMAND[command], words);
   if (ISO_DAY.test(command)) return showDay(command);
   switch (command) {
     case 'aide': case '--aide': case '-h': case '--help': return console.log(HELP);
+    case 'jour': return showDay(today());
     case 'hier': return showDay(addDays(today(), -1));
     case 'demain': return showDay(addDays(today(), 1));
-    case 'fait': return changeTask(words[0], 'done', 'Faite');
-    case 'annule': return changeTask(words[0], 'cancelled', 'Abandonnée');
-    case 'reporte': return postpone(words[0], words[1]);
+    case 'fait': return changeFromCommand(words[0], 'done', 'Faite');
+    case 'annule': return changeFromCommand(words[0], 'cancelled', 'Abandonnée');
+    case 'reporte': return postponeFromCommand(words[0], words[1]);
     case 'migrer': return migrate();
     case 'semaine': return showRange(weekStart(today()), 7);
     case 'mois': return showMonth();
