@@ -1,4 +1,7 @@
 import { test } from 'node:test';
+import { questionOf } from '../src/evening.mjs';
+
+const QUESTION = questionOf('2026-11-21');
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -97,11 +100,11 @@ test('humeur, question du soir et souvenirs en ligne de commande', () => {
   assert.match(runCli(folder, '2026-11-21', 'humeur').stdout, /Pas encore d’humeur[\s\S]*😄 radieuse/);
   assert.match(runCli(folder, '2026-11-21', 'humeur', 'radieuse').stdout, /Humeur du jour : 😄 radieuse/);
   assert.match(runCli(folder, '2026-11-21', 'humeur', 'licorne').stderr, /Humeur inconnue/);
-  assert.match(runCli(folder, '2026-11-21', 'soir').stdout, /Qu’aimerais-tu faire autrement demain \?/);
+  assert.ok(runCli(folder, '2026-11-21', 'soir').stdout.startsWith(QUESTION));
   runCli(folder, '2026-11-21', 'soir', 'me', 'coucher', 'tôt');
   runCli(folder, '2026-11-21', 't', 'banque');
   assert.match(runCli(folder, '2026-11-21', 'jour').stdout, /samedi 21 novembre · aujourd’hui · 😄 radieuse[\s\S]*soir : me coucher tôt/);
-  assert.match(readFileSync(join(folder, '2026-11.md'), 'utf8'), /humeur : 😄 radieuse\nsoir : Qu’aimerais-tu faire autrement demain \? — me coucher tôt\n\n• banque/);
+  assert.ok(readFileSync(join(folder, '2026-11.md'), 'utf8').includes(`humeur : 😄 radieuse\nsoir : ${QUESTION} — me coucher tôt\n\n• banque`));
   assert.match(runCli(folder, '2027-11-21', 'souvenirs').stdout, /Il y a un an \(samedi 21 novembre\) : 😄 banque/);
   assert.match(runCli(folder, '2026-12-31', 'souvenirs').stdout, /Rien de noté/, 'pas de 31 novembre');
   assert.match(runCli(folder, '2026-11-21', 'animations', 'non').stdout, /immobile/);
