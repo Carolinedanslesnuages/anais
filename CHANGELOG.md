@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/Carolinedanslesnuages/anais/compare/v1.1.0...v1.2.0) (2026-11-21)
+
+
+### Features
+
+* 🌸 notes longues, panneau latéral et thèmes de couleurs ([#4](https://github.com/Carolinedanslesnuages/anais/issues/4)) ([155440c](https://github.com/Carolinedanslesnuages/anais/commit/155440c8e3f63f88e734a213072843f12d885c98))
+
 ## [1.1.0](https://github.com/Carolinedanslesnuages/anais/compare/v1.0.0...v1.1.0) (2026-11-21)
 
 
