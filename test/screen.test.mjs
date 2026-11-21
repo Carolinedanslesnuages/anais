@@ -13,6 +13,8 @@ import { render, fitWidth, wrapText } from '../src/screen/render.mjs';
 import { THEMES, themeNamed } from '../src/screen/themes.mjs';
 
 process.env.ANAIS_DATE = '2026-11-21';
+// A fixed hour: the cloud's face depends on it (sleepy before 9 a.m.).
+process.env.ANAIS_HEURE = '15';
 const ARROW_UP = '\x1b[A';
 const DOWN = '\x1b[B';
 const RIGHT = '\x1b[C';
@@ -201,7 +203,7 @@ test('le nuage : endormi le matin, content après une tâche cochée, fête quan
   assert.match(screenText(state, 100).join('\n'), /\(  \^‿\^  \)/);
   state = press(state, journal, DOWN);
   assert.equal(state.companion, 'calm', 'la fête ne dure pas');
-  delete process.env.ANAIS_HEURE;
+  process.env.ANAIS_HEURE = '15';
 });
 
 test('aide complète avec ?, puis n’importe quelle touche pour revenir', () => {
