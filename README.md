@@ -2,6 +2,9 @@
 
 Un bullet journal dans le terminal.
 
+Le nom rend hommage à Anaïs Nin (1903-1977), qui a tenu son journal intime de l'âge de onze ans
+jusqu'à sa mort, avec assiduité.
+
 ```text
 $ anais t ! appeler la banque
 $ anais e réunion à 14 h
