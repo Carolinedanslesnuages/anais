@@ -151,7 +151,7 @@ les commandes ci-dessous, qui écrivent du texte simple.
 ## Installation
 
 ```sh
-npm install -g github:Carolinedanslesnuages/anais
+npm install -g @carolinedanslesnuages/anais
 ```
 
 Node 20 ou plus, aucune dépendance.
